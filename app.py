@@ -44,4 +44,64 @@ except Exception:
     st.sidebar.warning("⚠️ Não foi possível aceder ao Google Sheets automaticamente.")
 
 # Opção de Carregamento Manual como alternativa
-uploaded_file = st.sidebar.file_uploader("Ou carregue manualmente
+uploaded_file = st.sidebar.file_uploader(
+    "Ou carregue manualmente (Excel / CSV):", type=["xlsx", "csv"]
+)
+if uploaded_file is not None:
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            dados_op = pd.read_csv(uploaded_file)
+        else:
+            dados_op = pd.read_excel(uploaded_file)
+        st.sidebar.success("✅ Ficheiro de OP carregado manualmente!")
+    except Exception as e:
+        st.sidebar.error(f"Erro ao ler ficheiro: {e}")
+
+# Visualização da Tabela de OPs ativas
+if dados_op is not None:
+    with st.expander("📋 Ver Tabela de OPs Carregada"):
+        st.dataframe(dados_op)
+
+if not api_key:
+    st.warning("Insira a sua Chave de API na barra lateral para continuar.")
+    st.stop()
+
+# Inicializa o cliente do Gemini
+client = genai.Client(api_key=api_key)
+
+st.subheader("📷 Captura de Imagem")
+img_file_buffer = st.camera_input("Tirar fotografia da embalagem (Lata+Etiqueta ou Pacote+Caixa)")
+
+if img_file_buffer is not None:
+    image = Image.open(img_file_buffer)
+    st.image(image, caption="Imagem Capturada", use_container_width=True)
+    
+    with st.spinner("Analisando liberação de produto final..."):
+        contexto_op = ""
+        if dados_op is not None:
+            contexto_op = f"\n\nDados da Tabela de OP Atual:\n{dados_op.to_string(index=False)}"
+        
+        prompt = f"""
+        Analise a imagem da embalagem e extraia as seguintes informações em formato estruturado:
+        - Código de Barras / EAN
+        - Número do Lote
+        - Data de Validade / Fabricação
+        - Linha / Máquina (se visível)
+        
+        Compare os dados lidos na imagem com a Tabela de OPs fornecida abaixo e valide se a produção está correta.{contexto_op}
+        
+        Forneça um parecer final claro:
+        - ✅ DADOS CONFORMES (se o lote e a validade corresponderem à OP)
+        - ❌ DIVERGÊNCIA ENCONTRADA (se houver alguma inconformidade)
+        """
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=[image, prompt]
+            )
+            
+            st.markdown("### 🔍 Resultado da Validação")
+            st.write(response.text)
+            
+        except Exception as e:
+            st.error(f"Erro ao processar imagem com o Gemini: {e}")
