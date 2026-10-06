@@ -73,8 +73,7 @@ if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
-        # Reduz o tamanho da foto na memória para otimizar envio
+    with st.spinner("⚡ Analisando imagem..."):
         image_otimizada = image.copy()
         image_otimizada.thumbnail((1024, 1024))
         
@@ -87,41 +86,28 @@ if img_file_buffer is not None:
         
         prompt = f"""
         Você é um auditor de qualidade de linha de produção.
-        Analise a imagem capturada e execute as verificações estruturadas abaixo:
+        Analise a imagem e valide internamente segundo estas regras:
 
-        1. EXTRAÇÃO DE DADOS DA IMAGEM:
-           - Identifique se pertence à linha JUNGLE (Sim/Não)
-           - Descrição do Produto lida
-           - Código SKU lido
-           - Código de Barras DUN / EAN lido
-           - Número do Lote (se presente)
-           - Data de Validade / Fabricação (se presente)
-
-        2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
-           - **EXCEÇÃO ETIQUETAS JUNGLE**:
-             * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
-             * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
-             * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
-           
-           - **Validação do DUN-14**:
-             * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
-             * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
-           
-           - **Cruzamento SKU x DUN x OP**:
-             * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
-             * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
+        1. LINHA JUNGLE: Se for etiqueta Jungle, contém apenas Descrição, DUN e SKU. É NORMAL NÃO TER LOTE OU VALIDADE.
+        2. DUN-14: O código DUN de caixas deve possuir EXATAMENTE 14 dígitos numéricos.
+        3. CRUZAMENTO DE DADOS: O DUN, SKU e Lote lidos na imagem devem coincidir exatamente com os cadastros nas tabelas de referência fornecidas.
 
         {contexto_op}
 
-        3. FORMATO DO RESULTADO:
-           - Apresente os dados extraídos da imagem.
-           - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
-           - Exiba o parecer final claro:
-             - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
-             - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
+        --- INSTRUÇÕES RIGOROSAS DE SAÍDA ---
+        NÃO liste os dados extraídos. NÃO crie tópicos numerados ou explicações intermediárias.
+        Retorne APENAS um dos dois formatos abaixo:
+
+        Se estiver TUDO CONFORME:
+        ✅ **CONFORME**
+        *Todos os dados da embalagem conferem com a Ordem de Produção e cadastro.*
+
+        Se houver QUALQUER DIVERGÊNCIA:
+        ❌ **NÃO CONFORME**
+        **Onde está a não conformidade:**
+        - [Descreva aqui exatamente o ponto de divergência. Exemplo: "O código DUN impresso possui 13 dígitos, mas o padrão exige 14." ou "O SKU 12034136 não corresponde ao DUN 27896005804517 no cadastro."]
         """
         
-        # Modelo Lite atualizado conforme orientação da API Google
         MODELO_LITE = "gemini-3.5-flash-lite"
         
         resposta = None
