@@ -4,12 +4,8 @@ from PIL import Image
 from google import genai
 import time
 
-# Configuração da página: initial_sidebar_state="collapsed" força a barra lateral a iniciar recolhida
 st.set_page_config(
-    page_title="Validador Multi-Máquinas OP", 
-    page_icon="🏭", 
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
 )
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
@@ -77,7 +73,7 @@ if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem..."):
+    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
         # Reduz o tamanho da foto na memória para otimizar envio
         image_otimizada = image.copy()
         image_otimizada.thumbnail((1024, 1024))
@@ -125,7 +121,8 @@ if img_file_buffer is not None:
              - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
         """
         
-        MODELO = "gemini-2.5-flash"
+        # Modelo Lite atualizado conforme orientação da API Google
+        MODELO_LITE = "gemini-3.5-flash-lite"
         
         resposta = None
         ultimo_erro = None
@@ -134,7 +131,7 @@ if img_file_buffer is not None:
             try:
                 client = genai.Client(api_key=key)
                 resposta = client.models.generate_content(
-                    model=MODELO,
+                    model=MODELO_LITE,
                     contents=[image_otimizada, prompt]
                 )
                 if resposta and resposta.text:
