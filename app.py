@@ -99,13 +99,13 @@ if img_file_buffer is not None:
         Retorne APENAS um dos dois formatos abaixo:
 
         Se estiver TUDO CONFORME:
-        ✅ **CONFORME**
+        ✅ **VALIDAÇÃO DE P.A CONFORME**
         *Todos os dados da embalagem conferem com a Ordem de Produção e cadastro.*
 
         Se houver QUALQUER DIVERGÊNCIA:
-        ❌ **NÃO CONFORME**
+        ❌ **VALIDAÇÃO DE P.A NÃO CONFORME**
         **Onde está a não conformidade:**
-        - [Descreva aqui exatamente o ponto de divergência. Exemplo: "O código DUN impresso possui 13 dígitos, mas o padrão exige 14." ou "O SKU 12034136 não corresponde ao DUN 27896005804517 no cadastro."]
+        - [Descreva aqui exatamente o ponto de divergência.]
         """
         
         MODELO_LITE = "gemini-3.5-flash-lite"
