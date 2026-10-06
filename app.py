@@ -13,7 +13,7 @@ st.caption(
 )
 
 # Barra Lateral: Configurações e Integração Google Sheets
-st.sidebar.header("⚙️️ Configurações")
+st.sidebar.header("⚙ Configurações")
 
 # Procura a chave nos Secrets do Streamlit Cloud ou pede na barra lateral
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
@@ -21,7 +21,7 @@ if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
 else:
     api_key = st.sidebar.text_input("Chave API do Gemini:", type="password")
 
-# Novo ID da folha de cálculo do Google Sheets
+# ID da folha de cálculo do Google Sheets
 SHEET_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
 GSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
@@ -94,7 +94,7 @@ if img_file_buffer is not None:
         """
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-1.5-flash",
                 contents=[image, prompt]
             )
             
