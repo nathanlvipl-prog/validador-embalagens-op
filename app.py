@@ -16,7 +16,10 @@ st.caption(
 
 # Barra Lateral: Configurações e Carregamento da Folha de Cálculo
 st.sidebar.header("⚙️ Configurações")
-api_key = st.sidebar.text_input("Chave API do Gemini:", type="password")
+if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
+    api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    api_key = st.sidebar.text_input("Chave API do Gemini:", type="password")
 arquivo_op = st.sidebar.file_uploader(
     "Carregar Folha de Cálculo de OP (Excel / CSV)", type=["xlsx", "csv"]
 )
