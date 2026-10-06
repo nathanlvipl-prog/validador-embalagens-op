@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 from PIL import Image
@@ -74,7 +75,7 @@ if img_file_buffer is not None:
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
     with st.spinner("⚡ Analisando imagem rapidamente..."):
-        # Reduz o tamanho da foto na memória para acelerar o upload e a análise
+        # Reduz o tamanho da foto na memória para acelerar o envio e processamento
         image_otimizada = image.copy()
         image_otimizada.thumbnail((1024, 1024))
         
@@ -121,28 +122,29 @@ if img_file_buffer is not None:
              - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência (ex: dígitos incorretos no DUN-14, SKU/DUN divergente ou fora da OP).
         """
         
-        # Lista de modelos por ordem de prioridade de velocidade
-        modelos = ["gemini-2.5-flash", "gemini-2.0-flash"]
+        # Modelo oficial
+        MODELO = "gemini-3.8-flash"
+        
+        max_tentativas = 4
         resposta = None
         ultimo_erro = None
         
-        for mod in modelos:
-            if resposta:
-                break
-            for tentativa in range(2):
-                try:
-                    resposta = client.models.generate_content(
-                        model=mod,
-                        contents=[image_otimizada, prompt]
-                    )
-                    if resposta and resposta.text:
-                        break
-                except Exception as e:
-                    ultimo_erro = e
-                    time.sleep(1) # Pausa curta antes da próxima tentativa
+        for tentativa in range(max_tentativas):
+            try:
+                resposta = client.models.generate_content(
+                    model=MODELO,
+                    contents=[image_otimizada, prompt]
+                )
+                if resposta and resposta.text:
+                    break
+            except Exception as e:
+                ultimo_erro = e
+                # Aguarda tempo progressivo (2s, 4s, 6s) em caso de oscilação momentânea (503)
+                if ("503" in str(e) or "UNAVAILABLE" in str(e)) and tentativa < max_tentativas - 1:
+                    time.sleep(2 * (tentativa + 1))
+                else:
+                    break
         
         if resposta and resposta.text:
             st.markdown("### 🔍 Resultado da Validação")
-            st.write(resposta.text)
-        else:
-            st.error(f"Erro temporário de conexão com os servidores Gemini: {ultimo_erro}. Por favor, clique novamente para analisar.")
+            st.write
