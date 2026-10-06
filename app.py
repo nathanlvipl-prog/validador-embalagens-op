@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
+import time
 
 st.set_page_config(
     page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
@@ -9,7 +10,7 @@ st.set_page_config(
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
 st.caption(
-    "Validação visual rápida (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
+    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
 )
 
 # Barra Lateral: Configurações
@@ -66,18 +67,16 @@ if not api_keys:
     st.stop()
 
 st.subheader("📷 Captura de Imagem")
-
-# Retornado para a câmera direta na tela
 img_file_buffer = st.camera_input("Tirar fotografia da embalagem/etiqueta")
 
 if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem..."):
-        # Preserva alta resolução para matrizes de pontos inkjet
+    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
+        # Reduz o tamanho da foto na memória para otimizar envio
         image_otimizada = image.copy()
-        image_otimizada.thumbnail((2048, 2048))
+        image_otimizada.thumbnail((1024, 1024))
         
         contexto_op = ""
         if dados_op is not None:
@@ -92,4 +91,60 @@ if img_file_buffer is not None:
 
         1. EXTRAÇÃO DE DADOS DA IMAGEM:
            - Identifique se pertence à linha JUNGLE (Sim/Não)
-           -
+           - Descrição do Produto lida
+           - Código SKU lido
+           - Código de Barras DUN / EAN lido
+           - Número do Lote (se presente)
+           - Data de Validade / Fabricação (se presente)
+
+        2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
+           - **EXCEÇÃO ETIQUETAS JUNGLE**:
+             * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
+             * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
+             * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
+           
+           - **Validação do DUN-14**:
+             * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
+             * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
+           
+           - **Cruzamento SKU x DUN x OP**:
+             * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
+             * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
+
+        {contexto_op}
+
+        3. FORMATO DO RESULTADO:
+           - Apresente os dados extraídos da imagem.
+           - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
+           - Exiba o parecer final claro:
+             - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
+             - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
+        """
+        
+        # Modelo Lite atualizado conforme orientação da API Google
+        MODELO_LITE = "gemini-3.5-flash-lite"
+        
+        resposta = None
+        ultimo_erro = None
+        
+        for key in api_keys:
+            try:
+                client = genai.Client(api_key=key)
+                resposta = client.models.generate_content(
+                    model=MODELO_LITE,
+                    contents=[image_otimizada, prompt]
+                )
+                if resposta and resposta.text:
+                    break
+            except Exception as e:
+                ultimo_erro = e
+                continue
+        
+        if resposta and resposta.text:
+            st.markdown("### 🔍 Resultado da Validação")
+            st.write(resposta.text)
+        else:
+            if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
+                st.error("⚠️ Quota diária atingida nesta chave. Adicione outra chave API separada por vírgula para continuar.")
+            else:
+                st.error(f"Erro no processamento: {ultimo_erro}. Por favor, tente novamente.")
