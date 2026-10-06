@@ -2,21 +2,17 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
-import time
 
 st.set_page_config(
     page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
 )
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
-st.caption(
-    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
-)
+st.caption("Validação de conformidade de embalagem primária vs secundária e OP")
 
 # Barra Lateral: Configurações
 st.sidebar.header("⚙ Configurações")
 
-# Suporte a uma ou várias chaves separadas por vírgula
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
@@ -52,16 +48,6 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
-if dados_op is not None or dados_dun is not None:
-    with st.expander("📋 Ver Tabelas de Referência (OPs e SKUs)"):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Ordem de Produção (OP)")
-            st.dataframe(dados_op)
-        with col2:
-            st.subheader("Cadastro SKU x DUN")
-            st.dataframe(dados_dun)
-
 if not api_keys:
     st.warning("Insira pelo menos uma Chave de API na barra lateral para continuar.")
     st.stop()
@@ -73,52 +59,57 @@ if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem..."):
+    with st.spinner("⚡ Analisando imagem caractere por caractere..."):
+        # Manter alta resolução para não desfocar matriz de pontos inkjet
         image_otimizada = image.copy()
-        image_otimizada.thumbnail((1024, 1024))
+        image_otimizada.thumbnail((2048, 2048))
         
         contexto_op = ""
         if dados_op is not None:
-            contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
+            contexto_op += f"\n\n--- ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
         
         if dados_dun is not None:
-            contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
+            contexto_op += f"\n\n--- CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
         
         prompt = f"""
-        Você é um auditor de qualidade de linha de produção rigoroso.
-        Analise a imagem prestando atenção em cada caractere impresso.
+        Você é um auditor de controle de qualidade industrial de alta precisão.
+        Sua tarefa é fazer o OCR caractere por caractere e validar os dados da imagem.
 
-        PASSO A PASSO DA AUDITORIA:
-        1. LEITURA DOS TEXTOS DA IMAGEM:
-           - Se houver PACOTE / REFIL / SACHÊ em cima: Leia o Lote e Validade impressos nele.
-           - Se houver CAIXA DE PAPELÃO / ETIQUETA em baixo: Leia o Lote, Validade, SKU e DUN-14 impressos nela.
+        Siga rigorosamente estas 4 etapas:
 
-        2. CONFRONTO EMBALAGEM PRIMÁRIA VS EMBALAGEM SECUNDÁRIA:
-           - Caso a foto contenha o refil/pacote E a caixa:
-             O Lote e a Validade impressos no pacote/refil DEVEM SER RIGOROSAMENTE IDENTICOS ao Lote e Validade da caixa.
-             Se o Lote ou a Validade do pacote/refil for diferente do da caixa (mesmo por 1 dígito), declare NÃO CONFORME!
+        ETAPA 1: OCR E TRANSCRIÇÃO DIRETA DA IMAGEM
+        - Transcreva com extrema atenção aos números da matriz de pontos (inkjet):
+          • **Embalagem Primária (Refil/Pacote/Sachê em cima)**: Lote = [escreva aqui], Validade = [escreva aqui]
+          • **Embalagem Secundária (Caixa de Papelão/Etiqueta em baixo)**: Lote = [escreva aqui], Validade = [escreva aqui], EAN/DUN = [escreva aqui]
 
-        3. CONFRONTO COM TABELAS DE REFERÊNCIA:
-           - O Lote, Validade, SKU ou DUN lidos devem ser exatamente os cadastrados nas tabelas fornecidas.
+        ETAPA 2: COMPARAÇÃO DIRETA (PRIMÁRIA VS SECUNDÁRIA)
+        - Compare o Lote da Embalagem Primária com o Lote da Embalagem Secundária.
+        - Se houver divergência de 1 único dígito ou caractere entre o pacote e a caixa, reporte IMEDIATAMENTE como NÃO CONFORME.
 
-        4. ETIQUETAS JUNGLE: Se for etiqueta Jungle, contém apenas Descrição, DUN e SKU (é normal não ter Lote/Validade).
-
+        ETAPA 3: CONFRONTO COM TABELAS DE REFERÊNCIA
+        - Verifique se os dados lidos conferem com a OP e Cadastro abaixo.
         {contexto_op}
 
-        --- ESTRUTURA OBRIGATÓRIA DA RESPOSTA ---
-        NÃO liste os dados nem adicione explicações extras além do padrão abaixo.
+        ETAPA 4: VEREDITO FINAL
+        Exiba o resultado neste formato:
 
-        Se estiver TUDO CORRETO (sem divergência entre refil e caixa, nem contra a OP):
+        ### 🔍 Dados Identificados
+        - **Refil/Pacote**: Lote: `[lote_refil]` | Validade: `[validade_refil]`
+        - **Caixa**: Lote: `[lote_caixa]` | Validade: `[validade_caixa]`
+
+        ---
+        ### 📋 Resultado da Validação
+
+        Se TUDO for exatamente igual e bater com a OP:
         ✅ **VALIDAÇÃO DE P.A CONFORME**
-        *Todos os dados da embalagem conferem com a Ordem de Produção e cadastro.*
+        *Todos os dados da embalagem conferem entre si e com a Ordem de Produção.*
 
-        Se houver QUALQUER DIVERGÊNCIA (entre refil e caixa, ou contra a OP):
+        Se houver QUALQUER DIVERGÊNCIA (Lote do refil diferente do lote da caixa ou dados divergentes da OP):
         ❌ **VALIDAÇÃO DE P.A NÃO CONFORME**
-        **Onde está a não conformidade:**
-        - [Descreva exatamente o ponto divergente. Exemplo: O Lote no refil/pacote é diferente do Lote impresso na caixa.]
+        **Motivo da Não Conformidade:** [Explique claramente onde está a divergência, por exemplo: "O Lote impresso no Refil (L1090543) é diferente do Lote impresso na Caixa (L1097543)".]
         """
         
-        MODELO_LITE = "gemini-3.5-flash-lite"
+        MODELO = "gemini-2.5-flash"
         
         resposta = None
         ultimo_erro = None
@@ -127,7 +118,7 @@ if img_file_buffer is not None:
             try:
                 client = genai.Client(api_key=key)
                 resposta = client.models.generate_content(
-                    model=MODELO_LITE,
+                    model=MODELO,
                     contents=[image_otimizada, prompt]
                 )
                 if resposta and resposta.text:
@@ -137,10 +128,9 @@ if img_file_buffer is not None:
                 continue
         
         if resposta and resposta.text:
-            st.markdown("### 🔍 Resultado da Validação")
-            st.write(resposta.text)
+            st.markdown(resposta.text)
         else:
             if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
-                st.error("⚠️ Quota diária atingida nesta chave. Adicione outra chave API separada por vírgula para continuar.")
+                st.error("⚠️ Quota excedida na chave API. Adicione outra chave na barra lateral.")
             else:
-                st.error(f"Erro no processamento: {ultimo_erro}. Por favor, tente novamente.")
+                st.error(f"Erro no processamento: {ultimo_erro}")
