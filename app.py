@@ -94,7 +94,7 @@ if img_file_buffer is not None:
         """
         try:
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3.8-flash",
                 contents=[image, prompt]
             )
             
