@@ -10,7 +10,7 @@ st.set_page_config(
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
 st.caption(
-    "Validação visual (Lata + Etiqueta / Pacote + Caixa) com cruzamento de OP e Tabela de SKUs/DUNs"
+    "Validação visual (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle) com cruzamento de OP e Tabela de SKUs/DUNs"
 )
 
 # Barra Lateral: Configurações e Integração Google Sheets
@@ -53,7 +53,7 @@ try:
     dados_dun = carregar_dados_gsheet(GSHEET_DUN_URL)
     st.sidebar.success("✅ Planilha de SKUs / DUNs conectada!")
 except Exception:
-    st.sidebar.warning("⚠️️ Não foi possível carregar a planilha de SKUs/DUNs.")
+    st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
 # Visualização das Tabelas Carregadas
 if dados_op is not None or dados_dun is not None:
@@ -74,7 +74,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 st.subheader("📷 Captura de Imagem")
-img_file_buffer = st.camera_input("Tirar fotografia da embalagem (Lata+Etiqueta ou Pacote+Caixa)")
+img_file_buffer = st.camera_input("Tirar fotografia da embalagem/etiqueta")
 
 if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
@@ -89,28 +89,39 @@ if img_file_buffer is not None:
             contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
         
         prompt = f"""
-        Você é um auditor rigoroso de qualidade em linha de produção de alimentos.
-        Analise a imagem da embalagem capturada e execute a validação conforme os dados de referência abaixo.
+        Você é um auditor de qualidade de linha de produção.
+        Analise a imagem capturada e execute as verificações estruturadas abaixo.
 
         1. EXTRAÇÃO DE DADOS DA IMAGEM:
+           - Identifique se o produto/etiqueta pertence à linha **JUNGLE**.
+           - Descrição do Produto lida
+           - Código SKU lido
            - Código de Barras DUN / EAN lido na etiqueta/caixa
-           - Descrição / Nome do Produto ou SKU lido
-           - Número do Lote lido
-           - Data de Validade / Fabricação lida
+           - Número do Lote (se presente)
+           - Data de Validade / Fabricação (se presente)
 
         2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
-           - **Regra do DUN-14 (14 dígitos)**: O código DUN deve ter EXATAMENTE 14 dígitos numéricos. Contabilize os dígitos extraídos da imagem. Se não possuir exatamente 14 dígitos, marque imediatamente como erro.
-           - **Cruzamento SKU x DUN**: Verifique se o código DUN lido corresponde exatamente ao SKU/Produto cadastrado na Tabela de Referência SKU x DUN-14.
-           - **Cruzamento com a OP Ativa**: Verifique se o Lote e a Validade informados na embalagem coincidem com os dados da Tabela de Ordem de Produção (OP) ativa.
+           - **EXCEÇÃO ETIQUETAS JUNGLE**:
+             * As etiquetas exclusivamente da linha **JUNGLE** possuem APENAS Descrição do Produto, Código DUN e SKU.
+             * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
+             * NUNCA aponte a falta de Lote ou Validade como erro ou ausência de dados para etiquetas da linha **JUNGLE**.
+           
+           - **Validação do DUN-14**:
+             * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
+             * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
+           
+           - **Cruzamento SKU x DUN x OP**:
+             * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
+             * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
 
         {contexto_op}
 
         3. FORMATO DO RESULTADO:
-           - Liste todos os dados extraídos da imagem.
-           - Mostre a contagem exata de dígitos do DUN lido (Ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
-           - Exiba o parecer final:
-             - ✅ **DADOS CONFORMES**: Quando o DUN possuir 14 dígitos e todos os dados (SKU, DUN, Lote e Validade) baterem perfeitamente com as tabelas.
-             - ❌ **DIVERGÊNCIA ENCONTRADA**: Caso haja erro no número de dígitos do DUN, divergência de SKU/DUN ou dados incorretos referente à OP. Detalhe exatamente onde está o erro.
+           - Apresente os dados extraídos da imagem.
+           - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
+           - Exiba o parecer final claro:
+             - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos conforme a tabela) ou se for outro produto com todos os dados (incluindo Lote/Validade) corretos.
+             - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência encontrada (ex: divergência no código SKU/DUN, contagem incorreta de dígitos no DUN-14, ou SKU não bate com a OP).
         """
         
         # Lógica de Retry automático para erros de alta procura (503)
