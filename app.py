@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
-import time
 
 st.set_page_config(
     page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
@@ -10,7 +9,7 @@ st.set_page_config(
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
 st.caption(
-    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
+    "Validação visual rápida (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
 )
 
 # Barra Lateral: Configurações
@@ -67,16 +66,21 @@ if not api_keys:
     st.stop()
 
 st.subheader("📷 Captura de Imagem")
-img_file_buffer = st.camera_input("Tirar fotografia da embalagem/etiqueta")
+
+# MODIFICAÇÃO: Utiliza o seletor nativo do sistema que ativa a câmera traseira nos telemóveis/celulares
+img_file_buffer = st.file_uploader(
+    "Tirar foto da embalagem/etiqueta (Câmera Traseira)", 
+    type=["jpg", "jpeg", "png", "webp"]
+)
 
 if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
-        # Reduz o tamanho da foto na memória para otimizar envio
+    with st.spinner("⚡ Analisando imagem..."):
+        # Ajustado para 2048px para preservar detalhes de impressão inkjet sem desfocar
         image_otimizada = image.copy()
-        image_otimizada.thumbnail((1024, 1024))
+        image_otimizada.thumbnail((2048, 2048))
         
         contexto_op = ""
         if dados_op is not None:
@@ -121,8 +125,7 @@ if img_file_buffer is not None:
              - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
         """
         
-        # Modelo Lite atualizado conforme orientação da API Google
-        MODELO_LITE = "gemini-3.5-flash-lite"
+        MODELO = "gemini-2.5-flash"
         
         resposta = None
         ultimo_erro = None
@@ -131,7 +134,7 @@ if img_file_buffer is not None:
             try:
                 client = genai.Client(api_key=key)
                 resposta = client.models.generate_content(
-                    model=MODELO_LITE,
+                    model=MODELO,
                     contents=[image_otimizada, prompt]
                 )
                 if resposta and resposta.text:
