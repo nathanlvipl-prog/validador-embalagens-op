@@ -10,19 +10,18 @@ st.set_page_config(
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
 st.caption(
-    "Validação visual rápida e 100% gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
+    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
 )
 
 # Barra Lateral: Configurações
 st.sidebar.header("⚙ Configurações")
 
-# Pode colocar uma ou várias chaves separadas por vírgula no Secrets ou no input
+# Suporte a uma ou várias chaves separadas por vírgula
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
     raw_api_keys = st.sidebar.text_input("Chave(s) API do Gemini (separadas por vírgula):", type="password")
 
-# Converte as chaves numa lista
 api_keys = [k.strip() for k in raw_api_keys.split(",") if k.strip()] if raw_api_keys else []
 
 SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
@@ -51,7 +50,7 @@ try:
     dados_dun = carregar_dados_gsheet(GSHEET_DUN_URL)
     st.sidebar.success("✅ Planilha de SKUs / DUNs conectada!")
 except Exception:
-    st.sidebar.warning("⚠️️ Não foi possível carregar a planilha de SKUs/DUNs.")
+    st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
 if dados_op is not None or dados_dun is not None:
     with st.expander("📋 Ver Tabelas de Referência (OPs e SKUs)"):
@@ -74,8 +73,8 @@ if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem (Modo Gratuito Lite)..."):
-        # Reduz o tamanho da foto para otimizar envio e processamento
+    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
+        # Reduz o tamanho da foto na memória para otimizar envio
         image_otimizada = image.copy()
         image_otimizada.thumbnail((1024, 1024))
         
@@ -122,13 +121,12 @@ if img_file_buffer is not None:
              - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
         """
         
-        # Modelo Lite com limite gratuito de 1.500 requisições/dia
-        MODELO_LITE = "gemini-2.5-flash-lite"
+        # Modelo Lite atualizado conforme orientação da API Google
+        MODELO_LITE = "gemini-3.5-flash-lite"
         
         resposta = None
         ultimo_erro = None
         
-        # Tenta executar iterando sobre as chaves API disponíveis
         for key in api_keys:
             try:
                 client = genai.Client(api_key=key)
@@ -140,7 +138,6 @@ if img_file_buffer is not None:
                     break
             except Exception as e:
                 ultimo_erro = e
-                # Se for erro de quota (429), avança para a próxima chave
                 continue
         
         if resposta and resposta.text:
@@ -148,6 +145,6 @@ if img_file_buffer is not None:
             st.write(resposta.text)
         else:
             if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
-                st.error("⚠️ Quota diária gratuita atingida nesta chave. Se tiver outra chave API, adicione-a separada por vírgula nas configurações.")
+                st.error("⚠️ Quota diária atingida nesta chave. Adicione outra chave API separada por vírgula para continuar.")
             else:
                 st.error(f"Erro no processamento: {ultimo_erro}. Por favor, tente novamente.")
