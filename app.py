@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
+import time
 
 st.set_page_config(
     page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
@@ -94,14 +95,25 @@ if img_file_buffer is not None:
         - ✅ DADOS CONFORMES (se o lote e a validade corresponderem à OP)
         - ❌ DIVERGÊNCIA ENCONTRADA (se houver alguma inconformidade)
         """
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=[image, prompt]
-            )
-            
+        
+        # Lógica de Retry automático para erros de alta procura (503)
+        max_tentativas = 3
+        resposta = None
+        
+        for tentativa in range(max_tentativas):
+            try:
+                resposta = client.models.generate_content(
+                    model="gemini-3.8-flash",
+                    contents=[image, prompt]
+                )
+                break
+            except Exception as e:
+                if ("503" in str(e) or "UNAVAILABLE" in str(e)) and tentativa < max_tentativas - 1:
+                    time.sleep(2)  # Pausa de 2 segundos antes de tentar novamente
+                else:
+                    st.error(f"Erro ao processar imagem com o Gemini: {e}")
+                    st.stop()
+        
+        if resposta and resposta.text:
             st.markdown("### 🔍 Resultado da Validação")
-            st.write(response.text)
-            
-        except Exception as e:
-            st.error(f"Erro ao processar imagem com o Gemini: {e}")
+            st.write(resposta.text)
