@@ -2,17 +2,21 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
+import time
 
 st.set_page_config(
     page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
 )
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
-st.caption("Validação de conformidade de embalagem primária vs secundária e OP")
+st.caption(
+    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
+)
 
 # Barra Lateral: Configurações
 st.sidebar.header("⚙ Configurações")
 
+# Suporte a uma ou várias chaves separadas por vírgula
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
@@ -48,6 +52,16 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
+if dados_op is not None or dados_dun is not None:
+    with st.expander("📋 Ver Tabelas de Referência (OPs e SKUs)"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Ordem de Produção (OP)")
+            st.dataframe(dados_op)
+        with col2:
+            st.subheader("Cadastro SKU x DUN")
+            st.dataframe(dados_dun)
+
 if not api_keys:
     st.warning("Insira pelo menos uma Chave de API na barra lateral para continuar.")
     st.stop()
@@ -59,57 +73,56 @@ if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
     st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem caractere por caractere..."):
-        # Manter alta resolução para não desfocar matriz de pontos inkjet
+    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
+        # Reduz o tamanho da foto na memória para otimizar envio
         image_otimizada = image.copy()
-        image_otimizada.thumbnail((2048, 2048))
+        image_otimizada.thumbnail((1024, 1024))
         
         contexto_op = ""
         if dados_op is not None:
-            contexto_op += f"\n\n--- ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
+            contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
         
         if dados_dun is not None:
-            contexto_op += f"\n\n--- CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
+            contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
         
         prompt = f"""
-        Você é um auditor de controle de qualidade industrial de alta precisão.
-        Sua tarefa é fazer o OCR caractere por caractere e validar os dados da imagem.
+        Você é um auditor de qualidade de linha de produção.
+        Analise a imagem capturada e execute as verificações estruturadas abaixo:
 
-        Siga rigorosamente estas 4 etapas:
+        1. EXTRAÇÃO DE DADOS DA IMAGEM:
+           - Identifique se pertence à linha JUNGLE (Sim/Não)
+           - Descrição do Produto lida
+           - Código SKU lido
+           - Código de Barras DUN / EAN lido
+           - Número do Lote (se presente)
+           - Data de Validade / Fabricação (se presente)
 
-        ETAPA 1: OCR E TRANSCRIÇÃO DIRETA DA IMAGEM
-        - Transcreva com extrema atenção aos números da matriz de pontos (inkjet):
-          • **Embalagem Primária (Refil/Pacote/Sachê em cima)**: Lote = [escreva aqui], Validade = [escreva aqui]
-          • **Embalagem Secundária (Caixa de Papelão/Etiqueta em baixo)**: Lote = [escreva aqui], Validade = [escreva aqui], EAN/DUN = [escreva aqui]
+        2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
+           - **EXCEÇÃO ETIQUETAS JUNGLE**:
+             * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
+             * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
+             * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
+           
+           - **Validação do DUN-14**:
+             * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
+             * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
+           
+           - **Cruzamento SKU x DUN x OP**:
+             * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
+             * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
 
-        ETAPA 2: COMPARAÇÃO DIRETA (PRIMÁRIA VS SECUNDÁRIA)
-        - Compare o Lote da Embalagem Primária com o Lote da Embalagem Secundária.
-        - Se houver divergência de 1 único dígito ou caractere entre o pacote e a caixa, reporte IMEDIATAMENTE como NÃO CONFORME.
-
-        ETAPA 3: CONFRONTO COM TABELAS DE REFERÊNCIA
-        - Verifique se os dados lidos conferem com a OP e Cadastro abaixo.
         {contexto_op}
 
-        ETAPA 4: VEREDITO FINAL
-        Exiba o resultado neste formato:
-
-        ### 🔍 Dados Identificados
-        - **Refil/Pacote**: Lote: `[lote_refil]` | Validade: `[validade_refil]`
-        - **Caixa**: Lote: `[lote_caixa]` | Validade: `[validade_caixa]`
-
-        ---
-        ### 📋 Resultado da Validação
-
-        Se TUDO for exatamente igual e bater com a OP:
-        ✅ **VALIDAÇÃO DE P.A CONFORME**
-        *Todos os dados da embalagem conferem entre si e com a Ordem de Produção.*
-
-        Se houver QUALQUER DIVERGÊNCIA (Lote do refil diferente do lote da caixa ou dados divergentes da OP):
-        ❌ **VALIDAÇÃO DE P.A NÃO CONFORME**
-        **Motivo da Não Conformidade:** [Explique claramente onde está a divergência, por exemplo: "O Lote impresso no Refil (L1090543) é diferente do Lote impresso na Caixa (L1097543)".]
+        3. FORMATO DO RESULTADO:
+           - Apresente os dados extraídos da imagem.
+           - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
+           - Exiba o parecer final claro:
+             - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
+             - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
         """
         
-        MODELO = "gemini-2.5-flash"
+        # Modelo Lite atualizado conforme orientação da API Google
+        MODELO_LITE = "gemini-3.5-flash-lite"
         
         resposta = None
         ultimo_erro = None
@@ -118,7 +131,7 @@ if img_file_buffer is not None:
             try:
                 client = genai.Client(api_key=key)
                 resposta = client.models.generate_content(
-                    model=MODELO,
+                    model=MODELO_LITE,
                     contents=[image_otimizada, prompt]
                 )
                 if resposta and resposta.text:
@@ -128,9 +141,10 @@ if img_file_buffer is not None:
                 continue
         
         if resposta and resposta.text:
-            st.markdown(resposta.text)
+            st.markdown("### 🔍 Resultado da Validação")
+            st.write(resposta.text)
         else:
             if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
-                st.error("⚠️ Quota excedida na chave API. Adicione outra chave na barra lateral.")
+                st.error("⚠️ Quota diária atingida nesta chave. Adicione outra chave API separada por vírgula para continuar.")
             else:
-                st.error(f"Erro no processamento: {ultimo_erro}")
+                st.error(f"Erro no processamento: {ultimo_erro}. Por favor, tente novamente.")
