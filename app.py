@@ -5,7 +5,9 @@ from google import genai
 import time
 
 st.set_page_config(
-    page_title="Validador Multi-Máquinas OP", page_icon="🏭", layout="wide"
+    page_title="Validador Multi-Máquinas OP", 
+    page_icon="🏭", 
+    layout="wide"
 )
 
 st.title("🏭 Validação de Codificação e Lotes por Máquina")
@@ -67,7 +69,11 @@ if not api_keys:
     st.stop()
 
 st.subheader("📷 Captura de Imagem")
-img_file_buffer = st.camera_input("Tirar fotografia da embalagem/etiqueta")
+# Substituído st.camera_input por st.file_uploader para forçar uso da câmera nativa no Android
+img_file_buffer = st.file_uploader(
+    "Tirar foto ou selecionar imagem da embalagem/etiqueta", 
+    type=["jpg", "jpeg", "png"]
+)
 
 if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
