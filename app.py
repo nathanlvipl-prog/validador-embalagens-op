@@ -85,27 +85,37 @@ if img_file_buffer is not None:
             contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
         
         prompt = f"""
-        Você é um auditor de qualidade de linha de produção.
-        Analise a imagem e valide internamente segundo estas regras:
+        Você é um auditor de qualidade de linha de produção rigoroso.
+        Analise a imagem prestando atenção em cada caractere impresso.
 
-        1. LINHA JUNGLE: Se for etiqueta Jungle, contém apenas Descrição, DUN e SKU. É NORMAL NÃO TER LOTE OU VALIDADE.
-        2. DUN-14: O código DUN de caixas deve possuir EXATAMENTE 14 dígitos numéricos.
-        3. CRUZAMENTO DE DADOS: O DUN, SKU e Lote lidos na imagem devem coincidir exatamente com os cadastros nas tabelas de referência fornecidas.
+        PASSO A PASSO DA AUDITORIA:
+        1. LEITURA DOS TEXTOS DA IMAGEM:
+           - Se houver PACOTE / REFIL / SACHÊ em cima: Leia o Lote e Validade impressos nele.
+           - Se houver CAIXA DE PAPELÃO / ETIQUETA em baixo: Leia o Lote, Validade, SKU e DUN-14 impressos nela.
+
+        2. CONFRONTO EMBALAGEM PRIMÁRIA VS EMBALAGEM SECUNDÁRIA:
+           - Caso a foto contenha o refil/pacote E a caixa:
+             O Lote e a Validade impressos no pacote/refil DEVEM SER RIGOROSAMENTE IDENTICOS ao Lote e Validade da caixa.
+             Se o Lote ou a Validade do pacote/refil for diferente do da caixa (mesmo por 1 dígito), declare NÃO CONFORME!
+
+        3. CONFRONTO COM TABELAS DE REFERÊNCIA:
+           - O Lote, Validade, SKU ou DUN lidos devem ser exatamente os cadastrados nas tabelas fornecidas.
+
+        4. ETIQUETAS JUNGLE: Se for etiqueta Jungle, contém apenas Descrição, DUN e SKU (é normal não ter Lote/Validade).
 
         {contexto_op}
 
-        --- INSTRUÇÕES RIGOROSAS DE SAÍDA ---
-        NÃO liste os dados extraídos. NÃO crie tópicos numerados ou explicações intermediárias.
-        Retorne APENAS um dos dois formatos abaixo:
+        --- ESTRUTURA OBRIGATÓRIA DA RESPOSTA ---
+        NÃO liste os dados nem adicione explicações extras além do padrão abaixo.
 
-        Se estiver TUDO CONFORME:
+        Se estiver TUDO CORRETO (sem divergência entre refil e caixa, nem contra a OP):
         ✅ **VALIDAÇÃO DE P.A CONFORME**
         *Todos os dados da embalagem conferem com a Ordem de Produção e cadastro.*
 
-        Se houver QUALQUER DIVERGÊNCIA:
+        Se houver QUALQUER DIVERGÊNCIA (entre refil e caixa, ou contra a OP):
         ❌ **VALIDAÇÃO DE P.A NÃO CONFORME**
         **Onde está a não conformidade:**
-        - [Descreva aqui exatamente o ponto de divergência.]
+        - [Descreva exatamente o ponto divergente. Exemplo: O Lote no refil/pacote é diferente do Lote impresso na caixa.]
         """
         
         MODELO_LITE = "gemini-3.5-flash-lite"
