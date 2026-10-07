@@ -8,7 +8,6 @@ import requests
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
 # ==============================================================================
-# Cole aqui o link da sua implantação do Google Apps Script
 WEBHOOK_URL = "SUA_URL_DO_WEBHOOK_AQUI"
 
 st.set_page_config(
@@ -23,7 +22,7 @@ CADASTRO_COLABORADORES = {
     "32177": "EMANUEL LUCAS SEVERIANO DE SOUSA"
 }
 
-# 3. GERENCIAMENTO DE SESSÃO / NAVEGAÇÃO DE 3 PÁGINAS
+# 3. GERENCIAMENTO DE SESSÃO / NAVEGAÇÃO
 if "pagina" not in st.session_state:
     st.session_state.pagina = 1
 
@@ -54,12 +53,11 @@ def enviar_log_sheets(webhook_url, dados):
     except Exception as e:
         print(f"Erro ao salvar registro no Google Sheets: {e}")
 
-# 5. ESTILIZAÇÃO CSS (ESTILO QUALIT3C)
+# 5. ESTILIZAÇÃO CSS
 st.markdown("""
 <style>
     header[data-testid="stHeader"] { background-color: transparent; }
 
-    /* ESTILO DA TELA DE LOGIN (TELA 1) */
     .login-container {
         background: #ffffff;
         border-radius: 12px;
@@ -85,14 +83,12 @@ st.markdown("""
         margin-bottom: 25px;
     }
 
-    /* ESTILO DAS TELAS DE SISTEMA (TELAS 2 E 3) */
     .stApp {
         background-color: #f2f4f7;
         color: #2c3e50;
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Banner Superior estilo Qualit3c */
     .qualit3c-topbar {
         background: linear-gradient(90deg, #d35400 0%, #e67e22 100%);
         color: #ffffff;
@@ -115,7 +111,6 @@ st.markdown("""
         margin: 0;
     }
 
-    /* Cards e Containers Brancos */
     .qualit3c-card {
         background-color: #ffffff;
         border: 1px solid #dcdfe6;
@@ -125,7 +120,21 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.04);
     }
 
-    /* Botões Padrão Laranja */
+    /* Estilo para as caixas retráteis (<details>) */
+    details {
+        background-color: #f8f9fa;
+        border: 1px solid #dcdfe6;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+    summary {
+        font-weight: 700;
+        cursor: pointer;
+        color: #2c3e50;
+    }
+
     .stButton > button {
         background-color: #e67e22 !important;
         color: #ffffff !important;
@@ -149,7 +158,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# CONFIGURAÇÕES NA SIDEBAR (Visíveis quando logado)
+# CONFIGURAÇÕES NA SIDEBAR
 api_keys = []
 
 if st.session_state.pagina > 1:
@@ -173,7 +182,6 @@ if st.session_state.pagina > 1:
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Configurações do Sistema")
 
-    # Chaves API Gemini
     if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
         raw_api_keys = st.secrets["GEMINI_API_KEY"]
     else:
@@ -227,7 +235,6 @@ if st.session_state.pagina == 1:
                     st.session_state.hora_login = hora_agora
                     st.session_state.pagina = 2
                     
-                    # Log de Login no Sheets
                     log_login = {
                         "data_hora": hora_agora,
                         "tipo_evento": "LOGIN",
@@ -254,7 +261,6 @@ elif st.session_state.pagina == 2:
     </div>
     """, unsafe_allow_html=True)
 
-    # Tabelas de Referência em Expander
     SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
     SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
     GSHEET_OP_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_OP_ID}/export?format=csv"
@@ -324,36 +330,40 @@ elif st.session_state.pagina == 2:
                     Você é um validador de qualidade responsável pela LIBERAÇÃO DO PRODUTO FINAL na linha de produção.
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
-                    Analise a imagem capturada e execute a verificação estruturada abaixo:
+                    Analise a imagem capturada e gere a resposta rigorosamente no seguinte formato:
 
-                    1. EXTRAÇÃO DE DADOS DA EMBALAGEM:
-                       - Descrição do Produto lida
-                       - Código SKU lido
-                       - Código de Barras DUN / EAN lido
-                       - Número do Lote impresso na CAIXA (embalagem secundária)
-                       - Número do Lote impresso no REFIL / EMBALAGEM PRIMÁRIA
-                       - Data de Validade / Fabricação
+                    1. RESULTADO DE CONFORMIDADE (DEVE FICAR NO TOPO, DIRETO E RESUMIDO):
+                       - Se aprovado:
+                         ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
+                       - Se reprovado:
+                         ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
+                         **Motivo da Não Conformidade:** [Descreva em uma frase bem objetiva onde está o erro, ex: "Divergência de lote entre Caixa (L1097543) e Refil (L1098543)" ou "DUN-14 com quantidade incorreta de dígitos"].
 
-                    2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO E REPROVAÇÃO:
-                       - **CONSISTÊNCIA DE LOTE (CRÍTICO)**:
-                         * Compare o LOTE lido na caixa exterior com o LOTE lido no refil/embalagem primária.
-                         * SE HOUVER QUALQUER DIVERGÊNCIA ENTRE O LOTE DA CAIXA E O LOTE DO REFIL (exemplo: L1097543 na caixa vs L1098543 no refil), O PARECER DEVE SER OBRIGATORIAMENTE REPROVADO.
-                         * Lotes diferentes entre embalagem primária e secundária é uma DIVERGÊNCIA GRAVE de qualidade.
+                    2. TÓPICOS 1 E 2 (DEVEM FICAR DENTRO DE BLOCOS RETRÁTEIS <details>):
 
-                       - **VALIDAÇÃO DO DUN-14**:
-                         * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
-                         * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro e REPROVE.
-                       
-                       - **CRUZAMENTO SKU x DUN x OP**:
-                         * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
-                         * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
+                    <details>
+                    <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
 
-                    3. FORMATO DO PARECER DE LIBERAÇÃO:
-                       - Apresente os dados extraídos da embalagem (separando claramente Lote da Caixa e Lote do Refil).
-                       - Informe a contagem de dígitos do DUN.
-                       - Exiba o parecer de liberação final bem destacado:
-                         - ✅ **LIBERAÇÃO APROVADA (PRODUTO CONFORME)**
-                         - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe especificamente o motivo da reprovação (ex: Divergência de lote entre caixa e refil).
+                    - **Descrição do Produto:** [Descrição lida]
+                    - **Código SKU:** [SKU lido]
+                    - **Código DUN-14:** [DUN lido]
+                    - **Lote da Caixa (Secundária):** [Lote lido na caixa]
+                    - **Lote do Refil (Primária):** [Lote lido no refil]
+                    - **Data de Validade:** [Validade lida]
+                    </details>
+
+                    <details>
+                    <summary>📁 <b>2. Regras de Validação</b></summary>
+
+                    - **Consistência de Lote:** [Status do lote]
+                    - **Validação do DUN-14:** [Status do DUN]
+                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
+                    </details>
+
+                    REGRAS CRÍTICAS DE VALIDAÇÃO:
+                    - Se o Lote da Caixa for diferente do Lote do Refil -> REPROVAR IMEDIATAMENTE e detalhar no Motivo da Não Conformidade.
+                    - Se o DUN não possuir exatamente 14 dígitos numéricos -> REPROVAR IMEDIATAMENTE.
+                    - Se o SKU ou DUN não corresponderem às tabelas ativas -> REPROVAR IMEDIATAMENTE.
                     {contexto_op}
                     """
                     
@@ -374,15 +384,13 @@ elif st.session_state.pagina == 2:
                     
                     if resposta and resposta.text:
                         parecer_texto = resposta.text
-                        status_final = "APROVADO" if "LIBERAÇÃO APROVADA" in parecer_texto else "REPROVADO"
+                        status_final = "APROVADO" if "PRODUTO CONFORME" in parecer_texto else "REPROVADO"
                         
-                        # Armazena estado para a Página 3
                         st.session_state.imagem_capturada = image
                         st.session_state.resultado_analise = parecer_texto
                         st.session_state.hora_analise = hora_foto
                         st.session_state.pagina = 3
                         
-                        # Salva registro do resultado no Sheets
                         log_liberacao = {
                             "data_hora": hora_foto,
                             "tipo_evento": "LIBERACAO_PRODUTO",
@@ -430,12 +438,13 @@ elif st.session_state.pagina == 3:
         st.markdown("""
         <div class="qualit3c-card">
             <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
-                🔍 Relatório de Liberação (Análise de P.A.)
+                🔍 Relatório de Liberação
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown(st.session_state.resultado_analise)
+        # Exibe o resultado com HTML permitido para que as caixas retráteis funcionem
+        st.markdown(st.session_state.resultado_analise, unsafe_allow_html=True)
 
         st.markdown("---")
         
