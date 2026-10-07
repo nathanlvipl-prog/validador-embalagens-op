@@ -12,7 +12,7 @@ import requests
 WEBHOOK_URL = "SUA_URL_DO_WEBHOOK_AQUI"
 
 st.set_page_config(
-    page_title="Qualit3c - Liberação de Produto Final", 
+    page_title="Qualit3c - Liberação do Produto Final", 
     page_icon="📦", 
     layout="wide"
 )
@@ -123,14 +123,6 @@ st.markdown("""
         padding: 20px;
         margin-bottom: 18px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-    }
-    .qualit3c-card-title {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #2c3e50;
-        margin-bottom: 12px;
-        border-bottom: 2px solid #e67e22;
-        padding-bottom: 6px;
     }
 
     /* Botões Padrão Laranja */
@@ -250,7 +242,7 @@ if st.session_state.pagina == 1:
 
 
 # ==============================================================================
-# PÁGINA 2: CAPTURA DA EMBALAGEM / UPLOAD
+# PÁGINA 2: LIBERAÇÃO DO PRODUTO FINAL
 # ==============================================================================
 elif st.session_state.pagina == 2:
     st.markdown(f"""
@@ -258,7 +250,7 @@ elif st.session_state.pagina == 2:
         <div class="qualit3c-topbar-user">
             👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
         </div>
-        <div class="qualit3c-topbar-title">📦 Captura do Produto Final (P.A.)</div>
+        <div class="qualit3c-topbar-title">📦 Liberação do Produto Final</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -299,15 +291,10 @@ elif st.session_state.pagina == 2:
         st.warning("⚠️ Insira pelo menos uma Chave de API na barra lateral para prosseguir.")
         st.stop()
 
-    st.markdown("""
-    <div class="qualit3c-card">
-        <div class="qualit3c-card-title">📷 Tirar Foto ou Enviar Imagem do P.A.</div>
-    </div>
-    """, unsafe_allow_html=True)
-
     img_file_buffer = st.file_uploader(
-        "Toque para abrir a câmera ou selecione a imagem da embalagem/etiqueta", 
-        type=["jpg", "jpeg", "png"]
+        "Upload da foto do produto / embalagem", 
+        type=["jpg", "jpeg", "png"],
+        label_visibility="collapsed"
     )
 
     if img_file_buffer is not None:
@@ -334,7 +321,7 @@ elif st.session_state.pagina == 2:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
                     prompt = f"""
-                    Você é um validador de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL (P.A.) na linha de produção.
+                    Você é um validador de qualidade responsável pela LIBERAÇÃO DO PRODUTO FINAL na linha de produção.
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
                     Analise a imagem capturada e execute a verificação estruturada abaixo:
@@ -343,24 +330,30 @@ elif st.session_state.pagina == 2:
                        - Descrição do Produto lida
                        - Código SKU lido
                        - Código de Barras DUN / EAN lido
-                       - Número do Lote (se presente)
-                       - Data de Validade / Fabricação (se presente)
+                       - Número do Lote impresso na CAIXA (embalagem secundária)
+                       - Número do Lote impresso no REFIL / EMBALAGEM PRIMÁRIA
+                       - Data de Validade / Fabricação
 
-                    2. REGRAS OBRIGATÓRIAS DE LIBERAÇÃO:
-                       - **Validação do DUN-14**:
+                    2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO E REPROVAÇÃO:
+                       - **CONSISTÊNCIA DE LOTE (CRÍTICO)**:
+                         * Compare o LOTE lido na caixa exterior com o LOTE lido no refil/embalagem primária.
+                         * SE HOUVER QUALQUER DIVERGÊNCIA ENTRE O LOTE DA CAIXA E O LOTE DO REFIL (exemplo: L1097543 na caixa vs L1098543 no refil), O PARECER DEVE SER OBRIGATORIAMENTE REPROVADO.
+                         * Lotes diferentes entre embalagem primária e secundária é uma DIVERGÊNCIA GRAVE de qualidade.
+
+                       - **VALIDAÇÃO DO DUN-14**:
                          * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
-                         * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
+                         * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro e REPROVE.
                        
-                       - **Cruzamento SKU x DUN x OP**:
+                       - **CRUZAMENTO SKU x DUN x OP**:
                          * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
                          * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
 
                     3. FORMATO DO PARECER DE LIBERAÇÃO:
-                       - Apresente os dados extraídos da embalagem.
+                       - Apresente os dados extraídos da embalagem (separando claramente Lote da Caixa e Lote do Refil).
                        - Informe a contagem de dígitos do DUN.
                        - Exiba o parecer de liberação final bem destacado:
                          - ✅ **LIBERAÇÃO APROVADA (PRODUTO CONFORME)**
-                         - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe o motivo.
+                         - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe especificamente o motivo da reprovação (ex: Divergência de lote entre caixa e refil).
                     {contexto_op}
                     """
                     
@@ -414,7 +407,7 @@ elif st.session_state.pagina == 3:
         <div class="qualit3c-topbar-user">
             👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
         </div>
-        <div class="qualit3c-topbar-title">📋 Parecer Final de Liberação (P.A.)</div>
+        <div class="qualit3c-topbar-title">📋 Parecer Final - Liberação do Produto Final</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -423,7 +416,9 @@ elif st.session_state.pagina == 3:
     with col_esq:
         st.markdown("""
         <div class="qualit3c-card">
-            <div class="qualit3c-card-title">📷 Imagem do Produto Inspecionado</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
+                📷 Imagem do Produto Inspecionado
+            </div>
         </div>
         """, unsafe_allow_html=True)
         if st.session_state.imagem_capturada:
@@ -434,7 +429,9 @@ elif st.session_state.pagina == 3:
     with col_dir:
         st.markdown("""
         <div class="qualit3c-card">
-            <div class="qualit3c-card-title">🔍 Relatório de Liberação (Análise de P.A.)</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
+                🔍 Relatório de Liberação (Análise de P.A.)
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
