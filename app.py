@@ -421,4 +421,51 @@ elif st.session_state.pagina == 3:
     st.markdown(f"""
     <div class="qualit3c-topbar">
         <div class="qualit3c-topbar-user">
-            👤 {st.session_state.usuario_nome
+            👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
+        </div>
+        <div class="qualit3c-topbar-title">📋 Parecer Final - Liberação do Produto Final</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_esq, col_dir = st.columns([1, 1.2])
+
+    with col_esq:
+        st.markdown("""
+        <div class="qualit3c-card">
+            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
+                📷 Imagem do Produto Inspecionado
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.session_state.imagem_capturada:
+            st.image(st.session_state.imagem_capturada, use_container_width=True)
+        
+        st.info(f"⏱️ **Horário da Foto / Análise de P.A.:** {st.session_state.hora_analise}")
+
+    with col_dir:
+        st.markdown("""
+        <div class="qualit3c-card">
+            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
+                🔍 Relatório de Liberação
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(st.session_state.resultado_analise, unsafe_allow_html=True)
+
+        st.markdown("---")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🔄 REALIZAR NOVA LIBERAÇÃO", use_container_width=True):
+                st.session_state.pagina = 2
+                st.session_state.imagem_capturada = None
+                st.session_state.resultado_analise = ""
+                st.rerun()
+        with c2:
+            if st.button("🚪 SAIR DO SISTEMA", use_container_width=True):
+                st.session_state.pagina = 1
+                st.session_state.usuario_nome = ""
+                st.session_state.usuario_funcao = ""
+                st.session_state.usuario_matricula = ""
+                st.rerun()
