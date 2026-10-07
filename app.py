@@ -17,7 +17,7 @@ def obter_hora_atual():
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
 # ==============================================================================
-WEBHOOK_URL = "SUA_URL_DO_WEBHOOK_AQUI"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbw9uZ1tZ1XBK3PoQu_6JGkkpEzHLNmXMsIlbUnVBVw2OUxsP1GwHk8ZsJ1WU0eLIXftwg/exec"
 
 st.set_page_config(
     page_title="Qualit3c - Liberação do Produto Final", 
@@ -55,7 +55,7 @@ if "hora_analise" not in st.session_state:
 # 4. FUNÇÃO PARA ENVIAR LOGS PARA O GOOGLE SHEETS
 def enviar_log_sheets(webhook_url, dados):
     """Envia os dados de registro via HTTP POST para o Google Apps Script"""
-    if not webhook_url or webhook_url == "SUA_URL_DO_WEBHOOK_AQUI":
+    if not webhook_url or "SUA_URL" in webhook_url:
         return
     try:
         requests.post(webhook_url, json=dados, timeout=5)
