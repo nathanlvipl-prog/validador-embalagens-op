@@ -5,15 +5,15 @@ from google import genai
 
 # 1. Configuração da Página
 st.set_page_config(
-    page_title="Validador OP - Qualit3c Style", 
-    page_icon="🏭", 
+    page_title="Liberação de Produto Final - Qualit3c", 
+    page_icon="📦", 
     layout="wide"
 )
 
-# 2. INJEÇÃO DE CSS PERSONALIZADO (DESIGN QUALIT3C)
+# 2. INJEÇÃO DE CSS PERSONALIZADO (ESTILO QUALIT3C)
 st.markdown("""
 <style>
-    /* Fundo geral da aplicação (Cinza Claro Industrial) */
+    /* Fundo geral da aplicação */
     .stApp {
         background-color: #f2f4f7;
         color: #2c3e50;
@@ -29,7 +29,7 @@ st.markdown("""
     .qualit3c-topbar {
         background: linear-gradient(90deg, #e67e22 0%, #f39c12 100%);
         color: white;
-        padding: 14px 20px;
+        padding: 16px 20px;
         border-radius: 8px;
         margin-bottom: 20px;
         box-shadow: 0 3px 6px rgba(0,0,0,0.12);
@@ -66,7 +66,7 @@ st.markdown("""
         padding-bottom: 6px;
     }
 
-    /* Botões estilizados (Laranja do Qualit3c) */
+    /* Botões estilizados */
     .stButton > button {
         background-color: #e67e22 !important;
         color: #ffffff !important;
@@ -82,20 +82,20 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(211, 84, 0, 0.4);
     }
 
-    /* Estilização da Barra Lateral (Sidebar) */
+    /* Estilização da Barra Lateral */
     section[data-testid="stSidebar"] {
         background-color: #ffffff;
         border-right: 1px solid #e0e0e0;
     }
 
-    /* Ajuste na caixa de upload de imagem */
+    /* Caixa de Upload */
     section[data-testid="stFileUploadDropzone"] {
         background-color: #ffffff !important;
         border: 2px dashed #e67e22 !important;
         border-radius: 8px !important;
     }
     
-    /* Expanders limpos */
+    /* Expanders */
     .streamlit-expanderHeader {
         background-color: #ffffff !important;
         border-radius: 6px !important;
@@ -105,11 +105,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. CABEÇALHO QUALIT3C
+# 3. CABEÇALHO DO SISTEMA
 st.markdown("""
 <div class="qualit3c-topbar">
-    <h1>🏭 Validação de Codificação e Lotes por Máquina</h1>
-    <p>SISTEMA DE CONTROLE DE QUALIDADE | CONTROLE DE EMBALAGENS E ETIQUETAS</p>
+    <h1>📦 Liberação de Produto Final</h1>
+    <p>SISTEMA DE CONTROLE DE QUALIDADE | INSPEÇÃO E AUDITORIA DE PRODUTO FINAL</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -151,9 +151,9 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
-# 5. CONTEÚDO PRINCIPAL (LAYOUT EM CARDS)
+# 5. TABELAS DE REFERÊNCIA
 if dados_op is not None or dados_dun is not None:
-    with st.expander("📋 Ver Tabelas de Referência Sincronizadas (OPs e SKUs)"):
+    with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Ordem de Produção (OP)")
@@ -166,15 +166,15 @@ if not api_keys:
     st.warning("⚠️ Insira pelo menos uma Chave de API na barra lateral para liberar a validação.")
     st.stop()
 
-# CARD 1: CAPTURA DE IMAGEM
+# 6. CAPTURA E LIBERAÇÃO DE PRODUTO FINAL
 st.markdown("""
 <div class="qualit3c-card">
-    <div class="qualit3c-card-title">📷 Captura de Imagem da Embalagem / Etiqueta</div>
+    <div class="qualit3c-card-title">📷 Captura da Embalagem para Liberação</div>
 </div>
 """, unsafe_allow_html=True)
 
 img_file_buffer = st.file_uploader(
-    "Toque para acionar a Câmera Nativa ou selecione uma imagem do tablet", 
+    "Toque para abrir a câmera ou selecione a imagem da embalagem/etiqueta", 
     type=["jpg", "jpeg", "png"]
 )
 
@@ -184,10 +184,10 @@ if img_file_buffer is not None:
     col_img, col_res = st.columns([1, 1])
     
     with col_img:
-        st.image(image, caption="Imagem Capturada", use_container_width=True)
+        st.image(image, caption="Imagem do Produto Capturada", use_container_width=True)
     
     with col_res:
-        with st.spinner("⚡ Analisando imagem no modelo IA..."):
+        with st.spinner("⚡ Inspecionando produto para liberação..."):
             image_otimizada = image.copy()
             image_otimizada.thumbnail((1024, 1024))
             
@@ -199,22 +199,22 @@ if img_file_buffer is not None:
                 contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
             
             prompt = f"""
-            Você é um auditor de qualidade de linha de produção.
-            Analise a imagem capturada e execute as verificações estruturadas abaixo:
+            Você é um auditor de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL na linha de produção.
+            Analise a imagem capturada e execute a verificação estruturada abaixo:
 
-            1. EXTRAÇÃO DE DADOS DA IMAGEM:
-               - Identifique se pertence à linha JUNGLE (Sim/Não)
+            1. EXTRAÇÃO DE DADOS DA EMBALAGEM:
+               - Pertence à linha JUNGLE? (Sim/Não)
                - Descrição do Produto lida
                - Código SKU lido
                - Código de Barras DUN / EAN lido
                - Número do Lote (se presente)
                - Data de Validade / Fabricação (se presente)
 
-            2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
+            2. REGRAS OBRIGATÓRIAS DE LIBERAÇÃO:
                - **EXCEÇÃO ETIQUETAS JUNGLE**:
                  * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
                  * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
-                 * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
+                 * NUNCA reprove ou aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
                
                - **Validação do DUN-14**:
                  * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
@@ -226,12 +226,12 @@ if img_file_buffer is not None:
 
             {contexto_op}
 
-            3. FORMATO DO RESULTADO:
-               - Apresente os dados extraídos da imagem.
+            3. FORMATO DO PARECER DE LIBERAÇÃO:
+               - Apresente os dados extraídos da embalagem.
                - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
-               - Exiba o parecer final claro:
-                 - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
-                 - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
+               - Exiba o parecer de liberação final bem destacado:
+                 - ✅ **LIBERAÇÃO APROVADA (PRODUTO CONFORME)**: Se a etiqueta for Jungle ou outro produto com todas as informações corretas e alinhadas com a OP.
+                 - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe estritamente o motivo da não conformidade.
             """
             
             MODELO_LITE = "gemini-3.5-flash-lite"
@@ -252,7 +252,7 @@ if img_file_buffer is not None:
                     continue
             
             if resposta and resposta.text:
-                st.markdown("### 🔍 Parecer da Validação")
+                st.markdown("### 🔍 Parecer de Liberação do Produto")
                 st.markdown(resposta.text)
             else:
                 if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
