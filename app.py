@@ -2,8 +2,17 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import requests
+
+# ==============================================================================
+# CONFIGURAÇÃO DE FUSO HORÁRIO BRASIL (UTC-3)
+# ==============================================================================
+FUSO_BR = timezone(timedelta(hours=-3))
+
+def obter_hora_atual():
+    """Retorna data e hora formatadas no fuso horário do Brasil (UTC-3)"""
+    return datetime.now(FUSO_BR).strftime("%d/%m/%Y %H:%M:%S")
 
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
@@ -120,7 +129,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.04);
     }
 
-    /* Estilo para as caixas retráteis (<details>) */
     details {
         background-color: #f8f9fa;
         border: 1px solid #dcdfe6;
@@ -227,7 +235,7 @@ if st.session_state.pagina == 1:
                         f"COLABORADOR {mat_clean}"
                     )
                     
-                    hora_agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    hora_agora = obter_hora_atual()
                     
                     st.session_state.usuario_nome = nome_colaborador
                     st.session_state.usuario_funcao = funcao_selecionada
@@ -315,7 +323,7 @@ elif st.session_state.pagina == 2:
             st.write(" ")
             if st.button("🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True):
                 with st.spinner("⚡ Executando análise de P.A...."):
-                    hora_foto = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    hora_foto = obter_hora_atual()
                     
                     image_otimizada = image.copy()
                     image_otimizada.thumbnail((1024, 1024))
@@ -413,52 +421,4 @@ elif st.session_state.pagina == 3:
     st.markdown(f"""
     <div class="qualit3c-topbar">
         <div class="qualit3c-topbar-user">
-            👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
-        </div>
-        <div class="qualit3c-topbar-title">📋 Parecer Final - Liberação do Produto Final</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_esq, col_dir = st.columns([1, 1.2])
-
-    with col_esq:
-        st.markdown("""
-        <div class="qualit3c-card">
-            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
-                📷 Imagem do Produto Inspecionado
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.session_state.imagem_capturada:
-            st.image(st.session_state.imagem_capturada, use_container_width=True)
-        
-        st.info(f"⏱️ **Horário da Foto / Análise de P.A.:** {st.session_state.hora_analise}")
-
-    with col_dir:
-        st.markdown("""
-        <div class="qualit3c-card">
-            <div style="font-size: 1.15rem; font-weight: 700; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #e67e22; padding-bottom: 6px;">
-                🔍 Relatório de Liberação
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Exibe o resultado com HTML permitido para que as caixas retráteis funcionem
-        st.markdown(st.session_state.resultado_analise, unsafe_allow_html=True)
-
-        st.markdown("---")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("🔄 REALIZAR NOVA LIBERAÇÃO", use_container_width=True):
-                st.session_state.pagina = 2
-                st.session_state.imagem_capturada = None
-                st.session_state.resultado_analise = ""
-                st.rerun()
-        with c2:
-            if st.button("🚪 SAIR DO SISTEMA", use_container_width=True):
-                st.session_state.pagina = 1
-                st.session_state.usuario_nome = ""
-                st.session_state.usuario_funcao = ""
-                st.session_state.usuario_matricula = ""
-                st.rerun()
+            👤 {st.session_state.usuario_nome
