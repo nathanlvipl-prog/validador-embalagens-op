@@ -10,15 +10,23 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. GERENCIAMENTO DE SESSÃO / TELA ATIVA
+# 2. DICIONÁRIO DE MATRÍCULAS E COLABORADORES
+CADASTRO_COLABORADORES = {
+    "32164": "SILVIO NATHANAEL MEDEIROS DA SILVA",
+    "32177": "EMANUEL LUCAS SEVERIANO DE SOUSA"
+}
+
+# 3. GERENCIAMENTO DE SESSÃO / TELA ATIVA
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "usuario_nome" not in st.session_state:
+    st.session_state.usuario_nome = ""
 if "usuario_funcao" not in st.session_state:
     st.session_state.usuario_funcao = ""
 if "usuario_matricula" not in st.session_state:
     st.session_state.usuario_matricula = ""
 
-# 3. ESTILIZAÇÃO CSS (QUALIT3C STYLE)
+# 4. ESTILIZAÇÃO CSS (QUALIT3C EXACT STYLE)
 st.markdown("""
 <style>
     /* Ocultar cabeçalho padrão do Streamlit */
@@ -26,7 +34,7 @@ st.markdown("""
         background-color: transparent;
     }
 
-    /* ESTILO DA TELA DE IDENTIFICAÇÃO (TELA 1) */
+    /* ESTILO DA TELA DE LOGIN (TELA 1) */
     .login-container {
         background: #ffffff;
         border-radius: 12px;
@@ -48,7 +56,9 @@ st.markdown("""
     .qualit3c-subtitle {
         text-align: center;
         color: #7f8c8d;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
         margin-bottom: 25px;
     }
 
@@ -59,30 +69,33 @@ st.markdown("""
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Header Laranja Qualit3c */
+    /* Banner Superior estilo Qualit3c / SAP tablet */
     .qualit3c-topbar {
-        background: linear-gradient(90deg, #e67e22 0%, #f39c12 100%);
-        color: white;
-        padding: 16px 20px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.12);
+        background: linear-gradient(90deg, #d35400 0%, #e67e22 100%);
+        color: #ffffff;
+        padding: 12px 18px;
+        border-radius: 6px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-    .qualit3c-topbar h1 {
-        color: #ffffff !important;
-        font-size: 1.4rem !important;
-        font-weight: 700 !important;
-        margin: 0 !important;
-        padding: 0 !important;
+    .qualit3c-topbar-user {
+        font-size: 0.95rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
     }
-    .qualit3c-topbar p {
-        color: #fefefe !important;
-        font-size: 0.85rem !important;
-        margin: 4px 0 0 0 !important;
-        opacity: 0.95;
+    .qualit3c-topbar-title {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 0;
     }
 
-    /* Cards e Containers */
+    /* Cards e Containers Brancos */
     .qualit3c-card {
         background-color: #ffffff;
         border: 1px solid #dcdfe6;
@@ -96,11 +109,11 @@ st.markdown("""
         font-weight: 600;
         color: #2c3e50;
         margin-bottom: 10px;
-        border-bottom: 2px solid #f39c12;
+        border-bottom: 2px solid #e67e22;
         padding-bottom: 6px;
     }
 
-    /* Botões Padrão Laranja */
+    /* Botões Padrão Laranja Qualit3c */
     .stButton > button {
         background-color: #e67e22 !important;
         color: #ffffff !important;
@@ -122,7 +135,7 @@ st.markdown("""
         border-right: 1px solid #e0e0e0;
     }
 
-    /* Upload Dropzone */
+    /* Area de Upload */
     section[data-testid="stFileUploadDropzone"] {
         background-color: #ffffff !important;
         border: 2px dashed #e67e22 !important;
@@ -149,23 +162,31 @@ if not st.session_state.logged_in:
         with st.form("form_identificacao"):
             funcao_selecionada = st.selectbox(
                 "Função",
-                ["Controle de Qualidade", "Operador de Produção", "Líder de Linha", "Inspetor de Qualidade"]
+                ["Controle de Qualidade", "Operador de Produção"]
             )
             
             matricula_digitada = st.text_input(
                 "Matrícula",
-                placeholder="Digite o número da sua matrícula"
+                placeholder="Ex: 32164"
             )
             
             btn_entrar = st.form_submit_button("ENTRAR", use_container_width=True)
             
             if btn_entrar:
-                if matricula_digitada.strip() == "":
+                mat_clean = matricula_digitada.strip()
+                if mat_clean == "":
                     st.error("O campo 'Matrícula' é obrigatório.")
                 else:
+                    # Converte a matrícula para o nome do colaborador
+                    nome_colaborador = CADASTRO_COLABORADORES.get(
+                        mat_clean, 
+                        f"COLABORADOR {mat_clean}"
+                    )
+                    
                     st.session_state.logged_in = True
+                    st.session_state.usuario_nome = nome_colaborador
                     st.session_state.usuario_funcao = funcao_selecionada
-                    st.session_state.usuario_matricula = matricula_digitada.strip()
+                    st.session_state.usuario_matricula = mat_clean
                     st.rerun()
 
     st.stop()
@@ -175,20 +196,27 @@ if not st.session_state.logged_in:
 # TELA 2: VALIDAÇÃO E LIBERAÇÃO DE PRODUTO FINAL
 # ==============================================================================
 
-# Header com informações do usuário logado
+# Cabeçalho Laranja idêntico ao Qualit3c
 st.markdown(f"""
 <div class="qualit3c-topbar">
-    <h1>📦 Liberação de Produto Final</h1>
-    <p>SISTEMA DE CONTROLE DE QUALIDADE | FUNÇÃO: <b>{st.session_state.usuario_funcao.upper()}</b> | MATRÍCULA: <b>{st.session_state.usuario_matricula}</b></p>
+    <div class="qualit3c-topbar-user">
+        👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
+    </div>
+    <div class="qualit3c-topbar-title">📦 Liberação de Produto Final</div>
 </div>
 """, unsafe_allow_html=True)
 
 # Barra Lateral (Sidebar)
-st.sidebar.header("👤 Usuário Ativo")
-st.sidebar.info(f"**Função:** {st.session_state.usuario_funcao}\n\n**Matrícula:** {st.session_state.usuario_matricula}")
+st.sidebar.header("👤 Colaborador Ativo")
+st.sidebar.info(
+    f"**Nome:** {st.session_state.usuario_nome}\n\n"
+    f"**Função:** {st.session_state.usuario_funcao}\n\n"
+    f"**Matrícula:** {st.session_state.usuario_matricula}"
+)
 
 if st.sidebar.button("🚪 Sair / Trocar Usuário", use_container_width=True):
     st.session_state.logged_in = False
+    st.session_state.usuario_nome = ""
     st.session_state.usuario_funcao = ""
     st.session_state.usuario_matricula = ""
     st.rerun()
@@ -196,7 +224,7 @@ if st.sidebar.button("🚪 Sair / Trocar Usuário", use_container_width=True):
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações do Sistema")
 
-# API Keys
+# Chaves API Gemini
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
@@ -204,7 +232,7 @@ else:
 
 api_keys = [k.strip() for k in raw_api_keys.split(",") if k.strip()] if raw_api_keys else []
 
-# Carregamento de Planilhas
+# Carregamento de Planilhas Google
 SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
 SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
 
@@ -233,7 +261,7 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
-# Tabelas de Referência
+# Tabela de Referência
 if dados_op is not None or dados_dun is not None:
     with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
         col1, col2 = st.columns(2)
@@ -270,76 +298,4 @@ if img_file_buffer is not None:
     
     with col_res:
         with st.spinner("⚡ Inspecionando produto para liberação..."):
-            image_otimizada = image.copy()
-            image_otimizada.thumbnail((1024, 1024))
-            
-            contexto_op = ""
-            if dados_op is not None:
-                contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
-            
-            if dados_dun is not None:
-                contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
-            
-            prompt = f"""
-            Você é um auditor de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL na linha de produção.
-            O inspetor atual é da função: {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
-
-            Analise a imagem capturada e execute a verificação estruturada abaixo:
-
-            1. EXTRAÇÃO DE DADOS DA EMBALAGEM:
-               - Pertence à linha JUNGLE? (Sim/Não)
-               - Descrição do Produto lida
-               - Código SKU lido
-               - Código de Barras DUN / EAN lido
-               - Número do Lote (se presente)
-               - Data de Validade / Fabricação (se presente)
-
-            2. REGRAS OBRIGATÓRIAS DE LIBERAÇÃO:
-               - **EXCEÇÃO ETIQUETAS JUNGLE**:
-                 * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
-                 * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
-                 * NUNCA reprove ou aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
-               
-               - **Validação do DUN-14**:
-                 * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
-                 * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
-               
-               - **Cruzamento SKU x DUN x OP**:
-                 * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
-                 * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
-
-            {contexto_op}
-
-            3. FORMATO DO PARECER DE LIBERAÇÃO:
-               - Apresente os dados extraídos da embalagem.
-               - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
-               - Exiba o parecer de liberação final bem destacado:
-                 - ✅ **LIBERAÇÃO APROVADA (PRODUTO CONFORME)**: Se a etiqueta for Jungle ou outro produto com todas as informações corretas e alinhadas com a OP.
-                 - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe estritamente o motivo da não conformidade.
-            """
-            
-            MODELO_LITE = "gemini-3.5-flash-lite"
-            resposta = None
-            ultimo_erro = None
-            
-            for key in api_keys:
-                try:
-                    client = genai.Client(api_key=key)
-                    resposta = client.models.generate_content(
-                        model=MODELO_LITE,
-                        contents=[image_otimizada, prompt]
-                    )
-                    if resposta and resposta.text:
-                        break
-                except Exception as e:
-                    ultimo_erro = e
-                    continue
-            
-            if resposta and resposta.text:
-                st.markdown("### 🔍 Parecer de Liberação do Produto")
-                st.markdown(resposta.text)
-            else:
-                if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
-                    st.error("⚠️ Quota diária atingida nesta chave API. Adicione outra chave separada por vírgula.")
-                else:
-                    st.error(f"Erro no processamento: {ultimo_erro}. Tente novamente.")
+            image_otimizada =
