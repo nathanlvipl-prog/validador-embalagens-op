@@ -5,7 +5,12 @@ from google import genai
 from datetime import datetime
 import requests
 
-# 1. Configuração da Página
+# ==============================================================================
+# CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
+# ==============================================================================
+# Cole aqui o link da sua implantação do Google Apps Script
+WEBHOOK_URL = "SUA_URL_DO_WEBHOOK_AQUI"
+
 st.set_page_config(
     page_title="Qualit3c - Liberação de Produto Final", 
     page_icon="📦", 
@@ -42,7 +47,7 @@ if "hora_analise" not in st.session_state:
 # 4. FUNÇÃO PARA ENVIAR LOGS PARA O GOOGLE SHEETS
 def enviar_log_sheets(webhook_url, dados):
     """Envia os dados de registro via HTTP POST para o Google Apps Script"""
-    if not webhook_url:
+    if not webhook_url or webhook_url == "SUA_URL_DO_WEBHOOK_AQUI":
         return
     try:
         requests.post(webhook_url, json=dados, timeout=5)
@@ -153,11 +158,10 @@ st.markdown("""
 
 
 # CONFIGURAÇÕES NA SIDEBAR (Visíveis quando logado)
-WEBHOOK_URL = ""
 api_keys = []
 
 if st.session_state.pagina > 1:
-    st.sidebar.header("👤 Colaborador Ativo")
+    st.sidebar.header("👤 Validador Ativo")
     st.sidebar.info(
         f"**Nome:** {st.session_state.usuario_nome}\n\n"
         f"**Função:** {st.session_state.usuario_funcao}\n\n"
@@ -177,13 +181,6 @@ if st.session_state.pagina > 1:
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Configurações do Sistema")
 
-    # URL do Google Sheets Webhook
-    WEBHOOK_URL = st.sidebar.text_input(
-        "Link Webhook Google Sheets (para armazenar registros):",
-        placeholder="https://script.google.com/macros/s/.../exec",
-        type="password"
-    )
-
     # Chaves API Gemini
     if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
         raw_api_keys = st.secrets["GEMINI_API_KEY"]
@@ -194,7 +191,7 @@ if st.session_state.pagina > 1:
 
 
 # ==============================================================================
-# PÁGINA 1: IDENTIFICAÇÃO DO COLABORADOR
+# PÁGINA 1: IDENTIFICAÇÃO DO VALIDADOR
 # ==============================================================================
 if st.session_state.pagina == 1:
     col_left, col_center, col_right = st.columns([1, 1.8, 1])
@@ -261,7 +258,7 @@ elif st.session_state.pagina == 2:
         <div class="qualit3c-topbar-user">
             👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
         </div>
-        <div class="qualit3c-topbar-title">📦 Captura do Produto Final</div>
+        <div class="qualit3c-topbar-title">📦 Captura do Produto Final (P.A.)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -304,7 +301,7 @@ elif st.session_state.pagina == 2:
 
     st.markdown("""
     <div class="qualit3c-card">
-        <div class="qualit3c-card-title">📷 Tirar Foto ou Enviar Imagem da Embalagem</div>
+        <div class="qualit3c-card-title">📷 Tirar Foto ou Enviar Imagem do P.A.</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -324,7 +321,7 @@ elif st.session_state.pagina == 2:
             st.write(" ")
             st.write(" ")
             if st.button("🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True):
-                with st.spinner("⚡ Executando visão computacional e análise IA..."):
+                with st.spinner("⚡ Executando análise de P.A...."):
                     hora_foto = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                     
                     image_otimizada = image.copy()
@@ -337,13 +334,12 @@ elif st.session_state.pagina == 2:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
                     prompt = f"""
-                    Você é um auditor de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL na linha de produção.
-                    Inspetor: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
+                    Você é um validador de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL (P.A.) na linha de produção.
+                    Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
                     Analise a imagem capturada e execute a verificação estruturada abaixo:
 
                     1. EXTRAÇÃO DE DADOS DA EMBALAGEM:
-                       - Pertence à linha JUNGLE? (Sim/Não)
                        - Descrição do Produto lida
                        - Código SKU lido
                        - Código de Barras DUN / EAN lido
@@ -351,11 +347,6 @@ elif st.session_state.pagina == 2:
                        - Data de Validade / Fabricação (se presente)
 
                     2. REGRAS OBRIGATÓRIAS DE LIBERAÇÃO:
-                       - **EXCEÇÃO ETIQUETAS JUNGLE**:
-                         * Etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
-                         * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
-                         * NUNCA reprove ou aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
-                       
                        - **Validação do DUN-14**:
                          * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
                          * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
@@ -370,6 +361,7 @@ elif st.session_state.pagina == 2:
                        - Exiba o parecer de liberação final bem destacado:
                          - ✅ **LIBERAÇÃO APROVADA (PRODUTO CONFORME)**
                          - ❌ **LIBERAÇÃO REPROVADA (DIVERGÊNCIA ENCONTRADA)**: Detalhe o motivo.
+                    {contexto_op}
                     """
                     
                     MODELO_LITE = "gemini-3.5-flash-lite"
@@ -405,12 +397,12 @@ elif st.session_state.pagina == 2:
                             "nome": st.session_state.usuario_nome,
                             "funcao": st.session_state.usuario_funcao,
                             "status": status_final,
-                            "detalhes": parecer_texto[:400].replace("\n", " ") # resumo do parecer
+                            "detalhes": parecer_texto[:400].replace("\n", " ")
                         }
                         enviar_log_sheets(WEBHOOK_URL, log_liberacao)
                         st.rerun()
                     else:
-                        st.error("Erro na análise da IA. Verifique as chaves API.")
+                        st.error("Erro no processamento. Verifique as chaves API.")
 
 
 # ==============================================================================
@@ -422,7 +414,7 @@ elif st.session_state.pagina == 3:
         <div class="qualit3c-topbar-user">
             👤 {st.session_state.usuario_nome.upper()} | {st.session_state.usuario_funcao.upper()}
         </div>
-        <div class="qualit3c-topbar-title">📋 Parecer Final de Liberação</div>
+        <div class="qualit3c-topbar-title">📋 Parecer Final de Liberação (P.A.)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -437,12 +429,12 @@ elif st.session_state.pagina == 3:
         if st.session_state.imagem_capturada:
             st.image(st.session_state.imagem_capturada, use_container_width=True)
         
-        st.info(f"⏱️ **Horário da Foto / Análise IA:** {st.session_state.hora_analise}")
+        st.info(f"⏱️ **Horário da Foto / Análise de P.A.:** {st.session_state.hora_analise}")
 
     with col_dir:
         st.markdown("""
         <div class="qualit3c-card">
-            <div class="qualit3c-card-title">🔍 Relatório de Liberação (Visão Computacional)</div>
+            <div class="qualit3c-card-title">🔍 Relatório de Liberação (Análise de P.A.)</div>
         </div>
         """, unsafe_allow_html=True)
         
