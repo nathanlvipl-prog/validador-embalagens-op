@@ -4,6 +4,8 @@ from PIL import Image
 from google import genai
 from datetime import datetime, timezone, timedelta
 import requests
+import base64
+import io
 
 # ==============================================================================
 # CONFIGURAÇÃO DE FUSO HORÁRIO BRASIL (UTC-3)
@@ -52,13 +54,13 @@ if "resultado_analise" not in st.session_state:
 if "hora_analise" not in st.session_state:
     st.session_state.hora_analise = ""
 
-# 4. FUNÇÃO PARA ENVIAR LOGS PARA O GOOGLE SHEETS
+# 4. FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS / DRIVE
 def enviar_log_sheets(webhook_url, dados):
     """Envia os dados de registro via HTTP POST para o Google Apps Script"""
     if not webhook_url or "SUA_URL" in webhook_url:
         return
     try:
-        requests.post(webhook_url, json=dados, timeout=5)
+        requests.post(webhook_url, json=dados, timeout=10)
     except Exception as e:
         print(f"Erro ao salvar registro no Google Sheets: {e}")
 
@@ -322,11 +324,16 @@ elif st.session_state.pagina == 2:
             st.write(" ")
             st.write(" ")
             if st.button("🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True):
-                with st.spinner("⚡ Executando análise de P.A...."):
+                with st.spinner("⚡ Executando análise de P.A. e salvando imagem..."):
                     hora_foto = obter_hora_atual()
                     
                     image_otimizada = image.copy()
                     image_otimizada.thumbnail((1024, 1024))
+                    
+                    # Converte imagem otimizada em Base64 para envio ao Drive
+                    buffered = io.BytesIO()
+                    image_otimizada.save(buffered, format="JPEG", quality=85)
+                    img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
                     
                     contexto_op = ""
                     if dados_op is not None:
@@ -406,7 +413,9 @@ elif st.session_state.pagina == 2:
                             "nome": st.session_state.usuario_nome,
                             "funcao": st.session_state.usuario_funcao,
                             "status": status_final,
-                            "detalhes": parecer_texto[:400].replace("\n", " ")
+                            "detalhes": parecer_texto[:400].replace("\n", " "),
+                            "imagem_base64": img_base64,
+                            "nome_foto": f"LIB_{st.session_state.usuario_matricula}_{datetime.now(FUSO_BR).strftime('%Y%m%d_%H%M%S')}.jpg"
                         }
                         enviar_log_sheets(WEBHOOK_URL, log_liberacao)
                         st.rerun()
@@ -427,7 +436,7 @@ elif st.session_state.pagina == 3:
     </div>
     """, unsafe_allow_html=True)
 
-    col_esq, col_dir = st.columns([1, 1.2])
+    col_esq, col_dir = st.columns([1, 1.8])
 
     with col_esq:
         st.markdown("""
