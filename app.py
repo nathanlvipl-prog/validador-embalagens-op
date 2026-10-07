@@ -5,27 +5,61 @@ from google import genai
 
 # 1. Configuração da Página
 st.set_page_config(
-    page_title="Liberação de Produto Final - Qualit3c", 
+    page_title="Qualit3c - Liberação de Produto Final", 
     page_icon="📦", 
     layout="wide"
 )
 
-# 2. INJEÇÃO DE CSS PERSONALIZADO (ESTILO QUALIT3C)
+# 2. GERENCIAMENTO DE SESSÃO / TELA ATIVA
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "usuario_funcao" not in st.session_state:
+    st.session_state.usuario_funcao = ""
+if "usuario_matricula" not in st.session_state:
+    st.session_state.usuario_matricula = ""
+
+# 3. ESTILIZAÇÃO CSS (QUALIT3C STYLE)
 st.markdown("""
 <style>
-    /* Fundo geral da aplicação */
+    /* Ocultar cabeçalho padrão do Streamlit */
+    header[data-testid="stHeader"] {
+        background-color: transparent;
+    }
+
+    /* ESTILO DA TELA DE IDENTIFICAÇÃO (TELA 1) */
+    .login-container {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 35px 25px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        border-top: 6px solid #e67e22;
+        margin-top: 20px;
+    }
+    .qualit3c-logo {
+        font-size: 2.3rem;
+        font-weight: 800;
+        color: #333333;
+        text-align: center;
+        margin-bottom: 5px;
+    }
+    .qualit3c-logo span {
+        color: #e67e22;
+    }
+    .qualit3c-subtitle {
+        text-align: center;
+        color: #7f8c8d;
+        font-size: 0.9rem;
+        margin-bottom: 25px;
+    }
+
+    /* ESTILO DA TELA DE VALIDAÇÃO (TELA 2) */
     .stApp {
         background-color: #f2f4f7;
         color: #2c3e50;
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Ocultar cabeçalho padrão do Streamlit */
-    header[data-testid="stHeader"] {
-        background-color: transparent;
-    }
-
-    /* Header Laranja estilo Qualit3c */
+    /* Header Laranja Qualit3c */
     .qualit3c-topbar {
         background: linear-gradient(90deg, #e67e22 0%, #f39c12 100%);
         color: white;
@@ -48,7 +82,7 @@ st.markdown("""
         opacity: 0.95;
     }
 
-    /* Estilo dos Cards/Containers Brancos */
+    /* Cards e Containers */
     .qualit3c-card {
         background-color: #ffffff;
         border: 1px solid #dcdfe6;
@@ -66,7 +100,7 @@ st.markdown("""
         padding-bottom: 6px;
     }
 
-    /* Botões estilizados */
+    /* Botões Padrão Laranja */
     .stButton > button {
         background-color: #e67e22 !important;
         color: #ffffff !important;
@@ -82,40 +116,87 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(211, 84, 0, 0.4);
     }
 
-    /* Estilização da Barra Lateral */
+    /* Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #ffffff;
         border-right: 1px solid #e0e0e0;
     }
 
-    /* Caixa de Upload */
+    /* Upload Dropzone */
     section[data-testid="stFileUploadDropzone"] {
         background-color: #ffffff !important;
         border: 2px dashed #e67e22 !important;
         border-radius: 8px !important;
     }
-    
-    /* Expanders */
-    .streamlit-expanderHeader {
-        background-color: #ffffff !important;
-        border-radius: 6px !important;
-        border: 1px solid #dcdfe6 !important;
-        font-weight: 600 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. CABEÇALHO DO SISTEMA
-st.markdown("""
+
+# ==============================================================================
+# TELA 1: IDENTIFICAÇÃO DO COLABORADOR (QUALIT3C)
+# ==============================================================================
+if not st.session_state.logged_in:
+    col_left, col_center, col_right = st.columns([1, 1.8, 1])
+    
+    with col_center:
+        st.markdown("""
+        <div class="login-container">
+            <div class="qualit3c-logo">Qualit<span>3c</span></div>
+            <div class="qualit3c-subtitle">SISTEMA DE CONTROLE DE QUALIDADE</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("form_identificacao"):
+            funcao_selecionada = st.selectbox(
+                "Função",
+                ["Controle de Qualidade", "Operador de Produção", "Líder de Linha", "Inspetor de Qualidade"]
+            )
+            
+            matricula_digitada = st.text_input(
+                "Matrícula",
+                placeholder="Digite o número da sua matrícula"
+            )
+            
+            btn_entrar = st.form_submit_button("ENTRAR", use_container_width=True)
+            
+            if btn_entrar:
+                if matricula_digitada.strip() == "":
+                    st.error("O campo 'Matrícula' é obrigatório.")
+                else:
+                    st.session_state.logged_in = True
+                    st.session_state.usuario_funcao = funcao_selecionada
+                    st.session_state.usuario_matricula = matricula_digitada.strip()
+                    st.rerun()
+
+    st.stop()
+
+
+# ==============================================================================
+# TELA 2: VALIDAÇÃO E LIBERAÇÃO DE PRODUTO FINAL
+# ==============================================================================
+
+# Header com informações do usuário logado
+st.markdown(f"""
 <div class="qualit3c-topbar">
     <h1>📦 Liberação de Produto Final</h1>
-    <p>SISTEMA DE CONTROLE DE QUALIDADE | INSPEÇÃO E AUDITORIA DE PRODUTO FINAL</p>
+    <p>SISTEMA DE CONTROLE DE QUALIDADE | FUNÇÃO: <b>{st.session_state.usuario_funcao.upper()}</b> | MATRÍCULA: <b>{st.session_state.usuario_matricula}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
-# 4. BARRA LATERAL (Configurações)
+# Barra Lateral (Sidebar)
+st.sidebar.header("👤 Usuário Ativo")
+st.sidebar.info(f"**Função:** {st.session_state.usuario_funcao}\n\n**Matrícula:** {st.session_state.usuario_matricula}")
+
+if st.sidebar.button("🚪 Sair / Trocar Usuário", use_container_width=True):
+    st.session_state.logged_in = False
+    st.session_state.usuario_funcao = ""
+    st.session_state.usuario_matricula = ""
+    st.rerun()
+
+st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações do Sistema")
 
+# API Keys
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
@@ -123,6 +204,7 @@ else:
 
 api_keys = [k.strip() for k in raw_api_keys.split(",") if k.strip()] if raw_api_keys else []
 
+# Carregamento de Planilhas
 SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
 SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
 
@@ -151,7 +233,7 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
-# 5. TABELAS DE REFERÊNCIA
+# Tabelas de Referência
 if dados_op is not None or dados_dun is not None:
     with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
         col1, col2 = st.columns(2)
@@ -166,7 +248,7 @@ if not api_keys:
     st.warning("⚠️ Insira pelo menos uma Chave de API na barra lateral para liberar a validação.")
     st.stop()
 
-# 6. CAPTURA E LIBERAÇÃO DE PRODUTO FINAL
+# Card de Upload/Câmera
 st.markdown("""
 <div class="qualit3c-card">
     <div class="qualit3c-card-title">📷 Captura da Embalagem para Liberação</div>
@@ -200,6 +282,8 @@ if img_file_buffer is not None:
             
             prompt = f"""
             Você é um auditor de qualidade responsável pela LIBERAÇÃO DE PRODUTO FINAL na linha de produção.
+            O inspetor atual é da função: {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
+
             Analise a imagem capturada e execute a verificação estruturada abaixo:
 
             1. EXTRAÇÃO DE DADOS DA EMBALAGEM:
