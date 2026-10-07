@@ -2,23 +2,120 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 from google import genai
-import time
 
+# 1. Configuração da Página
 st.set_page_config(
-    page_title="Validador Multi-Máquinas OP", 
+    page_title="Validador OP - Qualit3c Style", 
     page_icon="🏭", 
     layout="wide"
 )
 
-st.title("🏭 Validação de Codificação e Lotes por Máquina")
-st.caption(
-    "Validação visual rápida e gratuita (Lata + Etiqueta / Pacote + Caixa / Etiquetas Jungle)"
-)
+# 2. INJEÇÃO DE CSS PERSONALIZADO (DESIGN QUALIT3C)
+st.markdown("""
+<style>
+    /* Fundo geral da aplicação (Cinza Claro Industrial) */
+    .stApp {
+        background-color: #f2f4f7;
+        color: #2c3e50;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
 
-# Barra Lateral: Configurações
-st.sidebar.header("⚙ Configurações")
+    /* Ocultar cabeçalho padrão do Streamlit */
+    header[data-testid="stHeader"] {
+        background-color: transparent;
+    }
 
-# Suporte a uma ou várias chaves separadas por vírgula
+    /* Header Laranja estilo Qualit3c */
+    .qualit3c-topbar {
+        background: linear-gradient(90deg, #e67e22 0%, #f39c12 100%);
+        color: white;
+        padding: 14px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.12);
+    }
+    .qualit3c-topbar h1 {
+        color: #ffffff !important;
+        font-size: 1.4rem !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .qualit3c-topbar p {
+        color: #fefefe !important;
+        font-size: 0.85rem !important;
+        margin: 4px 0 0 0 !important;
+        opacity: 0.95;
+    }
+
+    /* Estilo dos Cards/Containers Brancos */
+    .qualit3c-card {
+        background-color: #ffffff;
+        border: 1px solid #dcdfe6;
+        border-radius: 8px;
+        padding: 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .qualit3c-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #f39c12;
+        padding-bottom: 6px;
+    }
+
+    /* Botões estilizados (Laranja do Qualit3c) */
+    .stButton > button {
+        background-color: #e67e22 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        padding: 10px 20px !important;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(230, 126, 34, 0.3);
+    }
+    .stButton > button:hover {
+        background-color: #d35400 !important;
+        box-shadow: 0 4px 8px rgba(211, 84, 0, 0.4);
+    }
+
+    /* Estilização da Barra Lateral (Sidebar) */
+    section[data-testid="stSidebar"] {
+        background-color: #ffffff;
+        border-right: 1px solid #e0e0e0;
+    }
+
+    /* Ajuste na caixa de upload de imagem */
+    section[data-testid="stFileUploadDropzone"] {
+        background-color: #ffffff !important;
+        border: 2px dashed #e67e22 !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Expanders limpos */
+    .streamlit-expanderHeader {
+        background-color: #ffffff !important;
+        border-radius: 6px !important;
+        border: 1px solid #dcdfe6 !important;
+        font-weight: 600 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 3. CABEÇALHO QUALIT3C
+st.markdown("""
+<div class="qualit3c-topbar">
+    <h1>🏭 Validação de Codificação e Lotes por Máquina</h1>
+    <p>SISTEMA DE CONTROLE DE QUALIDADE | CONTROLE DE EMBALAGENS E ETIQUETAS</p>
+</div>
+""", unsafe_allow_html=True)
+
+# 4. BARRA LATERAL (Configurações)
+st.sidebar.header("⚙️ Configurações do Sistema")
+
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     raw_api_keys = st.secrets["GEMINI_API_KEY"]
 else:
@@ -36,7 +133,7 @@ GSHEET_DUN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?
 def carregar_dados_gsheet(url):
     return pd.read_csv(url)
 
-if st.sidebar.button("🔄 Sincronizar Planilhas (OP e SKUs)"):
+if st.sidebar.button("🔄 Sincronizar Planilhas (OP e SKUs)", use_container_width=True):
     st.cache_data.clear()
 
 dados_op = None
@@ -54,103 +151,111 @@ try:
 except Exception:
     st.sidebar.warning("⚠️ Não foi possível carregar a planilha de SKUs/DUNs.")
 
+# 5. CONTEÚDO PRINCIPAL (LAYOUT EM CARDS)
 if dados_op is not None or dados_dun is not None:
-    with st.expander("📋 Ver Tabelas de Referência (OPs e SKUs)"):
+    with st.expander("📋 Ver Tabelas de Referência Sincronizadas (OPs e SKUs)"):
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Ordem de Produção (OP)")
-            st.dataframe(dados_op)
+            st.dataframe(dados_op, use_container_width=True)
         with col2:
             st.subheader("Cadastro SKU x DUN")
-            st.dataframe(dados_dun)
+            st.dataframe(dados_dun, use_container_width=True)
 
 if not api_keys:
-    st.warning("Insira pelo menos uma Chave de API na barra lateral para continuar.")
+    st.warning("⚠️ Insira pelo menos uma Chave de API na barra lateral para liberar a validação.")
     st.stop()
 
-st.subheader("📷 Captura de Imagem")
-# Substituído st.camera_input por st.file_uploader para forçar uso da câmera nativa no Android
+# CARD 1: CAPTURA DE IMAGEM
+st.markdown("""
+<div class="qualit3c-card">
+    <div class="qualit3c-card-title">📷 Captura de Imagem da Embalagem / Etiqueta</div>
+</div>
+""", unsafe_allow_html=True)
+
 img_file_buffer = st.file_uploader(
-    "Tirar foto ou selecionar imagem da embalagem/etiqueta", 
+    "Toque para acionar a Câmera Nativa ou selecione uma imagem do tablet", 
     type=["jpg", "jpeg", "png"]
 )
 
 if img_file_buffer is not None:
     image = Image.open(img_file_buffer)
-    st.image(image, caption="Imagem Capturada", use_container_width=True)
     
-    with st.spinner("⚡ Analisando imagem (Modelo Lite Gratuito)..."):
-        # Reduz o tamanho da foto na memória para otimizar envio
-        image_otimizada = image.copy()
-        image_otimizada.thumbnail((1024, 1024))
-        
-        contexto_op = ""
-        if dados_op is not None:
-            contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
-        
-        if dados_dun is not None:
-            contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
-        
-        prompt = f"""
-        Você é um auditor de qualidade de linha de produção.
-        Analise a imagem capturada e execute as verificações estruturadas abaixo:
+    col_img, col_res = st.columns([1, 1])
+    
+    with col_img:
+        st.image(image, caption="Imagem Capturada", use_container_width=True)
+    
+    with col_res:
+        with st.spinner("⚡ Analisando imagem no modelo IA..."):
+            image_otimizada = image.copy()
+            image_otimizada.thumbnail((1024, 1024))
+            
+            contexto_op = ""
+            if dados_op is not None:
+                contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
+            
+            if dados_dun is not None:
+                contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
+            
+            prompt = f"""
+            Você é um auditor de qualidade de linha de produção.
+            Analise a imagem capturada e execute as verificações estruturadas abaixo:
 
-        1. EXTRAÇÃO DE DADOS DA IMAGEM:
-           - Identifique se pertence à linha JUNGLE (Sim/Não)
-           - Descrição do Produto lida
-           - Código SKU lido
-           - Código de Barras DUN / EAN lido
-           - Número do Lote (se presente)
-           - Data de Validade / Fabricação (se presente)
+            1. EXTRAÇÃO DE DADOS DA IMAGEM:
+               - Identifique se pertence à linha JUNGLE (Sim/Não)
+               - Descrição do Produto lida
+               - Código SKU lido
+               - Código de Barras DUN / EAN lido
+               - Número do Lote (se presente)
+               - Data de Validade / Fabricação (se presente)
 
-        2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
-           - **EXCEÇÃO ETIQUETAS JUNGLE**:
-             * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
-             * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
-             * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
-           
-           - **Validação do DUN-14**:
-             * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
-             * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
-           
-           - **Cruzamento SKU x DUN x OP**:
-             * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
-             * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
+            2. REGRAS OBRIGATÓRIAS DE VALIDAÇÃO:
+               - **EXCEÇÃO ETIQUETAS JUNGLE**:
+                 * As etiquetas exclusivamente da linha JUNGLE possuem APENAS Descrição do Produto, Código DUN e SKU.
+                 * **É ESPERADO E NORMAL QUE ETIQUETAS JUNGLE NÃO POSSUAM LOTE NEM DATA DE VALIDADE.**
+                 * NUNCA aponte a falta de Lote ou Validade como erro para a linha JUNGLE.
+               
+               - **Validação do DUN-14**:
+                 * O código DUN deve ter EXATAMENTE 14 dígitos numéricos.
+                 * Contabilize os dígitos do DUN lido na imagem. Se tiver mais ou menos de 14 dígitos, marque como erro.
+               
+               - **Cruzamento SKU x DUN x OP**:
+                 * O DUN lido e o SKU devem corresponder exatamente ao item cadastrado na Tabela de Referência SKU x DUN.
+                 * Verifique se o SKU/DUN corresponde a uma OP ativa na Tabela de Ordem de Produção (OP).
 
-        {contexto_op}
+            {contexto_op}
 
-        3. FORMATO DO RESULTADO:
-           - Apresente os dados extraídos da imagem.
-           - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
-           - Exiba o parecer final claro:
-             - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
-             - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
-        """
-        
-        # Modelo Lite atualizado conforme orientação da API Google
-        MODELO_LITE = "gemini-3.5-flash-lite"
-        
-        resposta = None
-        ultimo_erro = None
-        
-        for key in api_keys:
-            try:
-                client = genai.Client(api_key=key)
-                resposta = client.models.generate_content(
-                    model=MODELO_LITE,
-                    contents=[image_otimizada, prompt]
-                )
-                if resposta and resposta.text:
-                    break
-            except Exception as e:
-                ultimo_erro = e
-                continue
-        
-        if resposta and resposta.text:
-            st.markdown("### 🔍 Resultado da Validação")
-            st.write(resposta.text)
-        else:
-            if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
-                st.error("⚠️ Quota diária atingida nesta chave. Adicione outra chave API separada por vírgula para continuar.")
+            3. FORMATO DO RESULTADO:
+               - Apresente os dados extraídos da imagem.
+               - Informe a contagem de dígitos do DUN (ex: "DUN Lido: 17896045111081 - Total: 14 dígitos").
+               - Exiba o parecer final claro:
+                 - ✅ **DADOS CONFORMES**: Se a etiqueta for Jungle (Descrição, DUN-14 e SKU corretos) ou outro produto com todos os dados corretos.
+                 - ❌ **DIVERGÊNCIA ENCONTRADA**: Detalhe estritamente a divergência.
+            """
+            
+            MODELO_LITE = "gemini-3.5-flash-lite"
+            resposta = None
+            ultimo_erro = None
+            
+            for key in api_keys:
+                try:
+                    client = genai.Client(api_key=key)
+                    resposta = client.models.generate_content(
+                        model=MODELO_LITE,
+                        contents=[image_otimizada, prompt]
+                    )
+                    if resposta and resposta.text:
+                        break
+                except Exception as e:
+                    ultimo_erro = e
+                    continue
+            
+            if resposta and resposta.text:
+                st.markdown("### 🔍 Parecer da Validação")
+                st.markdown(resposta.text)
             else:
-                st.error(f"Erro no processamento: {ultimo_erro}. Por favor, tente novamente.")
+                if "429" in str(ultimo_erro) or "RESOURCE_EXHAUSTED" in str(ultimo_erro):
+                    st.error("⚠️ Quota diária atingida nesta chave API. Adicione outra chave separada por vírgula.")
+                else:
+                    st.error(f"Erro no processamento: {ultimo_erro}. Tente novamente.")
