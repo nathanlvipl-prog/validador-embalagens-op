@@ -492,4 +492,9 @@ elif st.session_state.pagina == 3:
                 st.session_state.resultado_analise = ""
                 st.rerun()
         with c2:
-            if st.button("🚪 SAIR DO
+            if st.button("🚪 SAIR DO SISTEMA", use_container_width=True):
+                st.session_state.pagina = 1
+                st.session_state.usuario_nome = ""
+                st.session_state.usuario_funcao = ""
+                st.session_state.usuario_matricula = ""
+                st.rerun()
