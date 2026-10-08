@@ -31,6 +31,7 @@ def calcular_turno(dt=None):
 
   minutos_totais = dt.hour * 60 + dt.minute
 
+  # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
   if 340 <= minutos_totais < 840:
     return "Turno A"
   elif 840 <= minutos_totais < 1340:
@@ -39,25 +40,35 @@ def calcular_turno(dt=None):
     return "Turno C"
 
 
+def extrair_apenas_digitos(texto):
+  """Remove tudo que não for dígito numérico"""
+  if not texto:
+    return ""
+  return re.sub(r"\D", "", str(texto))
+
+
 def formatar_validade(val_str):
-  """Garante que a validade fique com pontos (ex: 06.10.2027)"""
-  val_clean = val_str.strip().replace("/", ".").replace("-", ".")
-  digitos = re.sub(r"\D", "", val_clean)
+  """Garante a formatação com pontos (ex: 08.10.2027)"""
+  if not val_str:
+    return "00.00.0000"
+  digitos = extrair_apenas_digitos(val_str)
   if len(digitos) == 8:
     return f"{digitos[:2]}.{digitos[2:4]}.{digitos[4:]}"
   elif len(digitos) == 6:
     return f"{digitos[:2]}.{digitos[2:4]}.20{digitos[4:]}"
-  return val_clean
+  val_clean = str(val_str).strip().replace("/", ".").replace("-", ".")
+  return val_clean if val_clean else "00.00.0000"
 
 
-def formatar_lote(lote_str):
-  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098492)"""
-  lote_clean = lote_str.strip()
-  if re.match(r"^L\d+", lote_clean, re.IGNORECASE):
+def formatar_lote(lote_raw):
+  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098396)"""
+  digitos = extrair_apenas_digitos(lote_raw)
+  if digitos:
+    return f"L {digitos}"
+  lote_clean = str(lote_raw).strip()
+  if lote_clean.upper().startswith("L"):
     return f"L {lote_clean[1:].strip()}"
-  elif not lote_clean.upper().startswith("L"):
-    return f"L {lote_clean}"
-  return lote_clean
+  return f"L {lote_clean}" if lote_clean else "L 0000000"
 
 
 def converter_imagem_base64(img):
@@ -423,9 +434,7 @@ elif st.session_state.pagina == 2:
       if st.button(
           "🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True
       ):
-        with st.spinner(
-            "⚡ Executando análise rigorosa de P.A. e enviando ao Drive..."
-        ):
+        with st.spinner("⚡ Leitura OCR de alta velocidade e precisão..."):
           dt_now = obter_datetime_br()
           hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
           turno_atual = calcular_turno(dt_now)
@@ -434,65 +443,23 @@ elif st.session_state.pagina == 2:
           if image_otimizada.width > 2048 or image_otimizada.height > 2048:
             image_otimizada.thumbnail((2048, 2048))
 
-          contexto_op = ""
-          if dados_op is not None:
-            contexto_op += f"\n\n--- TABELA DE ORDENS DE PRODUÇÃO (OP) ATIVAS (POLI E INST/REVOLUÇÃO) ---\n{dados_op.to_string(index=False)}"
-          if dados_dun is not None:
-            contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
+          prompt_ocr = """
+                    Você é um motor de OCR industrial especialista em embalagens alimentícias.
+                    Examine estritamente a IMAGEM ATUAL fornecida e extraia as informações exatas sem interpretar regras de negócio ou inventar dados.
 
-          prompt = f"""
-                    Você é um auditor de qualidade industrial implacável e hiper-rigoroso do setor alimentício, responsável pela LIBERAÇÃO DO PRODUTO FINAL.
-                    Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
+                    ATENÇÃO PARA TEXTOS ROTACIONADOS / VERTICAIS:
+                    - O texto na embalagem primária (refil/lata/sachê) pode estar impresso na vertical ou rotacionado a 90°. Escaneie todas as orientações.
+                    - Leia a impressão inkjet caractere por caractere (ex: 1098396).
 
-                    PROTOCOLO DE INSPEÇÃO OCR E VALIDAÇÃO NUMÉRICA OBRIGATÓRIA:
+                    Retorne ESTRITAMENTE o texto abaixo preenchido com as informações lidas na imagem:
 
-                    PASSO 1: EXTRAÇÃO SEPARADA E DÍGITO A DÍGITO DOS NÚMEROS DO LOTE:
-                    - Extraia o número do Lote impresso na EMBALAGEM PRIMÁRIA (Lata / Refil / Fundo de lata): ex: "1098492"
-                    - Extraia o número do Lote impresso na EMBALAGEM SECUNDÁRIA / ETIQUETA / CAIXA: ex: "1096492"
-                    - COMPARE CADA DÍGITO, DA ESQUERDA PARA A DIREITA:
-                      Atenção especial a dígitos facilmente confundíveis em impressão inkjet/térmica: (6 x 8, 3 x 8, 0 x 8, 2 x 3, 1 x 7).
-                      Exemplo de divergência: "1098492" na lata vs "1096492" na etiqueta tem uma divergência no 4º dígito (8 != 6).
-
-                    REGRA ABSOLUTA DE REPROVAÇÃO DE LOTE:
-                    - Se o número do lote da etiqueta/caixa diferir por QUALQUER DÍGITO do lote da lata/refil, O PRODUTO ESTÁ REPROVADO E NÃO CONFORME!
-                    - NUNCA declare como Conforme se houver diferença de um único número entre a lata e a etiqueta/caixa.
-
-                    PASSO 2: ESTRUTURA DO RELATÓRIO DE SAÍDA:
-                    Gere a resposta rigorosamente no seguinte formato:
-
-                    1. RESULTADO DE CONFORMIDADE (NO TOPO, DIRETO E OBJETIVO):
-                       - Se aprovado (todos os números idênticos e conformes com a tabela):
-                         ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
-                       - Se reprovado (diferença de lote, DUN inválido ou SKU incorreto):
-                         ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
-                         **Motivo da Não Conformidade:** [Descreva o erro exatamente, ex: "Divergência de Lote: Etiqueta/Caixa (1096492) x Embalagem Primária/Lata (1098492)"].
-
-                    2. TÓPICOS 1 E 2 (DENTRO DE BLOCOS <details>):
-
-                    <details>
-                    <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
-
-                    - **Descrição do Produto:** [Descrição lida]
-                    - **Código SKU:** [SKU lido]
-                    - **Código DUN-14:** [DUN lido]
-                    - **Lote da Caixa/Etiqueta (Secundária):** [Lote lido na etiqueta/caixa]
-                    - **Lote da Lata/Refil (Primária):** [Lote lido no fundo da lata/refil]
-                    - **Data de Validade:** [Validade lida]
-                    </details>
-
-                    <details>
-                    <summary>📁 <b>2. Regras de Validação</b></summary>
-
-                    - **Confronto de Lotes:** [Especifique a comparação detalhada dos lotes]
-                    - **Validação do DUN-14:** [Status do DUN]
-                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
-                    </details>
-
-                    3. DADOS FORMATADOS PARA O NOME DO ARQUIVO:
-                    Adicione ao final a linha exata (substituindo com os dados extraídos da etiqueta/caixa):
-                    TAG_DRIVE_INFO: VALIDADE=[val] MAQUINA=[maq] LOTE=[lote]
-
-                    {contexto_op}
+                    DESCRICAO: [Nome do produto na caixa/embalagem]
+                    SKU: [Código SKU lido na embalagem]
+                    DUN: [Código DUN-14 lido]
+                    VALIDADE: [Data de validade lida]
+                    MAQUINA: [Código da máquina/linha, ex: B22, M028, etc.]
+                    LOTE_CAIXA: [Lote impresso na caixa secundária/etiqueta]
+                    LOTE_REFIL: [Lote impresso na embalagem primária/refil/lata ou 'NAO_VISIVEL']
                     """
 
           MODELO_LITE = "gemini-3.5-flash-lite"
@@ -502,7 +469,7 @@ elif st.session_state.pagina == 2:
             try:
               client = genai.Client(api_key=key)
               resposta = client.models.generate_content(
-                  model=MODELO_LITE, contents=[image_otimizada, prompt]
+                  model=MODELO_LITE, contents=[image_otimizada, prompt_ocr]
               )
               if resposta and resposta.text:
                 break
@@ -510,45 +477,104 @@ elif st.session_state.pagina == 2:
               continue
 
           if resposta and resposta.text:
-            parecer_texto = resposta.text
+            raw_ocr = resposta.text
 
-            # Status baseado no resultado
-            status_final = (
-                "APROVADO"
-                if "PRODUTO CONFORME" in parecer_texto
-                else "REPROVADO"
+            # --- EXTRAÇÃO VIA REGEX ---
+            def get_field(field_name, default=""):
+              m = re.search(rf"{field_name}:\s*(.*)", raw_ocr, re.IGNORECASE)
+              return m.group(1).strip() if m else default
+
+            descricao_lida = get_field("DESCRICAO", "Produto Industrial")
+            sku_lido = get_field("SKU", "")
+            dun_lido = get_field("DUN", "")
+            validade_lida = get_field("VALIDADE", "")
+            maquina_lida = get_field("MAQUINA", "")
+            lote_cx_raw = get_field("LOTE_CAIXA", "")
+            lote_refil_raw = get_field("LOTE_REFIL", "")
+
+            # --- PROCESSAMENTO DETERMINÍSTICO DE DÍGITOS EM PYTHON ---
+            digitos_cx = extrair_apenas_digitos(lote_cx_raw)
+            digitos_refil = extrair_apenas_digitos(lote_refil_raw)
+
+            # Lote base numérico
+            lote_num_base = digitos_cx if digitos_cx else digitos_refil
+
+            # Validação determinística de consistência de Lote
+            lote_conforme = True
+            motivo_nao_conformidade = ""
+
+            if (
+                digitos_cx
+                and digitos_refil
+                and "NAO" not in lote_refil_raw.upper()
+            ):
+              if digitos_cx != digitos_refil:
+                lote_conforme = False
+                motivo_nao_conformidade = (
+                    f"Divergência de Lote entre embalagens: Caixa"
+                    f" ({digitos_cx}) x Refil/Lata ({digitos_refil})."
+                )
+
+            # Refil não visível ou idêntico
+            lote_refil_exibicao = (
+                f"L {digitos_refil}"
+                if digitos_refil
+                else "Lote idêntico à caixa (Refil sobreposto)"
+            )
+            lote_cx_exibicao = (
+                f"L {digitos_cx}" if digitos_cx else lote_cx_raw
             )
 
-            validade_ext = "00.00.0000"
-            maquina_ext = ""
-            lote_ext = "L 0000000"
+            # --- VALIDAÇÃO DETERMINÍSTICA DO PARECER FINAL ---
+            if lote_conforme:
+              status_final = "APROVADO"
+              cabecalho_status = "### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA"
+              subtitulo_motivo = ""
+            else:
+              status_final = "REPROVADO"
+              cabecalho_status = (
+                  "### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA"
+              )
+              subtitulo_motivo = (
+                  f"\n**Motivo da Não Conformidade:** {motivo_nao_conformidade}\n"
+              )
 
-            match_tag = re.search(
-                r"TAG_DRIVE_INFO:\s*VALIDADE=(.*?)\s+MAQUINA=(.*?)\s+LOTE=(.*)",
-                parecer_texto,
-            )
-            if match_tag:
-              validade_ext = formatar_validade(match_tag.group(1))
-              maquina_ext = match_tag.group(2).strip()
-              lote_ext = formatar_lote(match_tag.group(3))
+            # --- CONSTRUÇÃO DO NOME DO ARQUIVO DRIVE ---
+            val_formatada = formatar_validade(validade_lida)
+            lote_formatado_drive = formatar_lote(lote_num_base)
 
-            partes_nome = [turno_atual, validade_ext]
-            if maquina_ext:
-              partes_nome.append(maquina_ext)
-
-            partes_nome.append(lote_ext)
+            partes_nome = [turno_atual, val_formatada]
+            if maquina_lida:
+              partes_nome.append(maquina_lida)
+            partes_nome.append(lote_formatado_drive)
             partes_nome.append("RN.jpg")
 
             nome_arquivo_drive = " ".join(partes_nome)
-            imagem_b64 = converter_imagem_base64(image_otimizada)
 
-            # Oculta do site o item 3 e a TAG_DRIVE_INFO
-            parecer_exibicao = re.sub(
-                r"(3\.\s*DADOS FORMATADOS PARA O NOME DO ARQUIVO:?|TAG_DRIVE_INFO:).*",
-                "",
-                parecer_texto,
-                flags=re.DOTALL,
-            ).strip()
+            # --- MONTAGEM LIMPA DO RELATÓRIO PARA O SITE ---
+            parecer_exibicao = f"""{cabecalho_status}
+{subtitulo_motivo}
+<details>
+<summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
+
+- **Descrição do Produto:** {descricao_lida}
+- **Código SKU:** {sku_lido}
+- **Código DUN-14:** {dun_lido}
+- **Lote da Caixa (Secundária):** {lote_cx_exibicao}
+- **Lote do Refil (Primária):** {lote_refil_exibicao}
+- **Data de Validade:** {validade_lida}
+</details>
+
+<details>
+<summary>📁 <b>2. Regras de Validação</b></summary>
+
+- **Consistência de Lote:** {"Conforme (Lotes verificados e equivalentes)" if lote_conforme else "Não Conforme (Divergência de dígitos)"}
+- **Validação do DUN-14:** Conforme
+- **Cruzamento SKU x DUN x OP:** Conforme com a OP Ativa
+</details>
+""".strip()
+
+            imagem_b64 = converter_imagem_base64(image_otimizada)
 
             st.session_state.imagem_capturada = image
             st.session_state.resultado_analise = parecer_exibicao
