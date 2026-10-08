@@ -273,32 +273,52 @@ elif st.session_state.pagina == 2:
 
     SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
     SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
-    GSHEET_OP_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_OP_ID}/export?format=csv"
-    GSHEET_DUN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
+
+    # Função para baixar o arquivo completo (.xlsx) e consolidar TODAS as abas (Poli, Inst, Revolução, etc.)
+    @st.cache_data(ttl=60)
+    def carregar_todas_abas_op(sheet_id):
+        try:
+            url_xlsx = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+            # sheet_name=None força a leitura de TODAS as abas existentes
+            dict_abas = pd.read_excel(url_xlsx, sheet_name=None)
+            
+            lista_dfs = []
+            for nome_aba, df in dict_abas.items():
+                if not df.empty:
+                    df_limpo = df.dropna(how="all").copy()
+                    if not df_limpo.empty:
+                        df_limpo["ABA_PLANTA"] = nome_aba
+                        lista_dfs.append(df_limpo)
+            
+            if lista_dfs:
+                return pd.concat(lista_dfs, ignore_index=True)
+            return pd.DataFrame()
+        except Exception as e:
+            st.error(f"Erro ao carregar abas de OP: {e}")
+            return pd.DataFrame()
 
     @st.cache_data(ttl=60)
-    def carregar_dados_gsheet(url):
-        return pd.read_csv(url)
+    def carregar_dados_dun(sheet_id):
+        try:
+            url_csv = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+            return pd.read_csv(url_csv)
+        except Exception:
+            return pd.DataFrame()
 
-    dados_op = None
-    dados_dun = None
-    try:
-        dados_op = carregar_dados_gsheet(GSHEET_OP_URL)
-        dados_dun = carregar_dados_gsheet(GSHEET_DUN_URL)
-    except Exception:
-        pass
+    dados_op = carregar_todas_abas_op(SHEET_OP_ID)
+    dados_dun = carregar_dados_dun(SHEET_DUN_ID)
 
-    with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
+    with st.expander("📋 Tabela de Referência para Liberação (Todas as Plantas: POLI, INST, REVOLUÇÃO)"):
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Ordem de Produção (OP)")
-            if dados_op is not None:
+            st.subheader("Ordens de Produção (Consolidado de Todas as Abas)")
+            if not dados_op.empty:
                 st.dataframe(dados_op, use_container_width=True)
             else:
                 st.info("Planilha de OPs em carregamento...")
         with col2:
             st.subheader("Cadastro SKU x DUN")
-            if dados_dun is not None:
+            if not dados_dun.empty:
                 st.dataframe(dados_dun, use_container_width=True)
             else:
                 st.info("Planilha de DUNs em carregamento...")
@@ -336,23 +356,25 @@ elif st.session_state.pagina == 2:
                     img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
                     
                     contexto_op = ""
-                    if dados_op is not None:
-                        contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
-                    if dados_dun is not None:
+                    if not dados_op.empty:
+                        contexto_op += f"\n\n--- TABELA CONSOLIDADA DE ORDENS DE PRODUÇÃO (TODAS AS PLANTAS) ---\n{dados_op.to_string(index=False)}"
+                    if not dados_dun.empty:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
                     prompt = f"""
                     Você é um validador de qualidade responsável pela LIBERAÇÃO DO PRODUTO FINAL na linha de produção.
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
-                    Analise a imagem capturada e gere a resposta rigorosamente no seguinte formato:
+                    Analise a imagem capturada e cruze os dados lidos com a Tabela Consolidada de Ordens de Produção (que inclui todas as abas/plantas: Poli, Inst, Revolução) e a Tabela de Cadastros DUN.
+
+                    Gere a resposta rigorosamente no seguinte formato:
 
                     1. RESULTADO DE CONFORMIDADE (DEVE FICAR NO TOPO, DIRETO E RESUMIDO):
                        - Se aprovado:
                          ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
                        - Se reprovado:
                          ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
-                         **Motivo da Não Conformidade:** [Descreva em uma frase bem objetiva onde está o erro, ex: "Divergência de lote entre Caixa (L1097543) e Refil (L1098543)" ou "DUN-14 com quantidade incorreta de dígitos"].
+                         **Motivo da Não Conformidade:** [Descreva em uma frase bem objetiva onde está o erro, ex: "Divergência de lote entre Caixa (L1097543) e Refil (L1098543)"].
 
                     2. TÓPICOS 1 E 2 (DEVEM FICAR DENTRO DE BLOCOS RETRÁTEIS <details>):
 
@@ -371,14 +393,17 @@ elif st.session_state.pagina == 2:
                     <summary>📁 <b>2. Regras de Validação</b></summary>
 
                     - **Consistência de Lote:** [Status do lote]
-                    - **Validação do DUN-14:** [Status do DUN]
-                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
+                    - **Validação do DUN-14:** [Status do DUN - ex: Cadastrado, Ausente na Tabela de Cadastro, etc.]
+                    - **Cruzamento SKU x OP:** [Status do cruzamento do SKU com a Tabela Consolidada de OP]
                     </details>
 
                     REGRAS CRÍTICAS DE VALIDAÇÃO:
-                    - Se o Lote da Caixa for diferente do Lote do Refil -> REPROVAR IMEDIATAMENTE e detalhar no Motivo da Não Conformidade.
-                    - Se o DUN não possuir exatamente 14 dígitos numéricos -> REPROVAR IMEDIATAMENTE.
-                    - Se o SKU ou DUN não corresponderem às tabelas ativas -> REPROVAR IMEDIATAMENTE.
+                    1. LOTE: Se o Lote da Caixa for diferente do Lote do Refil -> REPROVAR IMEDIATAMENTE.
+                    2. SKU NA OP: O SKU DEVE constar na Tabela Consolidada de Ordem de Produção (independente de qual aba/planta ele pertença: Poli, Inst ou Revolução). Se o SKU for localizado em qualquer uma das abas, a validação do SKU é APROVADA.
+                    3. DUN-14: 
+                       - Se o DUN-14 for lido na embalagem, verifique se possui 14 dígitos.
+                       - Se o DUN-14 não constar na tabela SKU x DUN-14, informe em 'Validação do DUN-14' que o código DUN não possui cadastro prévio, mas NÃO REPROVE a liberação se o SKU e os Lotes estiverem corretos.
+                    
                     {contexto_op}
                     """
                     
