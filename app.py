@@ -269,31 +269,60 @@ elif st.session_state.pagina == 2:
     </div>
     """, unsafe_allow_html=True)
 
-    SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
+    # URLs diretas das abas de OP (Poli e Inst/Revolução) e DUN
+    GSHEET_OP_POLI_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=220654294"
+    GSHEET_OP_INST_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=904615686"
+    
     SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
-    GSHEET_OP_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_OP_ID}/export?format=csv"
     GSHEET_DUN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
 
     @st.cache_data(ttl=60)
     def carregar_dados_gsheet(url):
         return pd.read_csv(url)
 
+    dados_op_poli = None
+    dados_op_inst = None
     dados_op = None
     dados_dun = None
+
     try:
-        dados_op = carregar_dados_gsheet(GSHEET_OP_URL)
+        dados_op_poli = carregar_dados_gsheet(GSHEET_OP_POLI_URL)
+    except Exception:
+        pass
+
+    try:
+        dados_op_inst = carregar_dados_gsheet(GSHEET_OP_INST_URL)
+    except Exception:
+        pass
+
+    try:
         dados_dun = carregar_dados_gsheet(GSHEET_DUN_URL)
     except Exception:
         pass
 
+    # Unifica as duas abas de OPs em um único DataFrame para consulta do Gemini
+    lista_ops = [df for df in [dados_op_poli, dados_op_inst] if df is not None]
+    if lista_ops:
+        dados_op = pd.concat(lista_ops, ignore_index=True)
+
     with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Ordem de Produção (OP)")
-            if dados_op is not None:
-                st.dataframe(dados_op, use_container_width=True)
-            else:
-                st.info("Planilha de OPs em carregamento...")
+            st.subheader("Ordens de Produção (OP)")
+            tab_poli, tab_inst = st.tabs(["Poli", "Inst / Revolução"])
+            
+            with tab_poli:
+                if dados_op_poli is not None:
+                    st.dataframe(dados_op_poli, use_container_width=True)
+                else:
+                    st.info("Aba 'Poli' em carregamento...")
+                    
+            with tab_inst:
+                if dados_op_inst is not None:
+                    st.dataframe(dados_op_inst, use_container_width=True)
+                else:
+                    st.info("Aba 'Inst / Revolução' em carregamento...")
+
         with col2:
             st.subheader("Cadastro SKU x DUN")
             if dados_dun is not None:
@@ -330,7 +359,7 @@ elif st.session_state.pagina == 2:
                     
                     contexto_op = ""
                     if dados_op is not None:
-                        contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
+                        contexto_op += f"\n\n--- TABELA DE ORDENS DE PRODUÇÃO (OP) ATIVAS (POLI E INST/REVOLUÇÃO) ---\n{dados_op.to_string(index=False)}"
                     if dados_dun is not None:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
@@ -375,14 +404,14 @@ elif st.session_state.pagina == 2:
                     {contexto_op}
                     """
                     
-                    MODELO_LITE = "gemini-3.5-flash-lite"
+                    MODELO_VALIDO = "gemini-2.5-flash"
                     resposta = None
                     
                     for key in api_keys:
                         try:
                             client = genai.Client(api_key=key)
                             resposta = client.models.generate_content(
-                                model=MODELO_LITE,
+                                model=MODELO_VALIDO,
                                 contents=[image_otimizada, prompt]
                             )
                             if resposta and resposta.text:
