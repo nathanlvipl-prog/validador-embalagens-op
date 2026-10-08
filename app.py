@@ -28,7 +28,6 @@ def calcular_turno(dt=None):
     
     minutos_totais = dt.hour * 60 + dt.minute
     
-    # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
     if 340 <= minutos_totais < 840:
         return "Turno A"
     elif 840 <= minutos_totais < 1340:
@@ -37,9 +36,12 @@ def calcular_turno(dt=None):
         return "Turno C"
 
 def converter_imagem_base64(img):
-    """Converte a imagem PIL otimizada para string Base64"""
+    """Otimiza e converte a imagem PIL para string Base64 compacta"""
+    img_copia = img.copy()
+    if img_copia.width > 1280 or img_copia.height > 1280:
+        img_copia.thumbnail((1280, 1280))
     buffered = io.BytesIO()
-    img.convert("RGB").save(buffered, format="JPEG", quality=85)
+    img_copia.convert("RGB").save(buffered, format="JPEG", quality=75)
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # ==============================================================================
@@ -72,7 +74,6 @@ if "usuario_matricula" not in st.session_state:
 if "hora_login" not in st.session_state:
     st.session_state.hora_login = ""
 
-# Dados do resultado da imagem (Página 3)
 if "imagem_capturada" not in st.session_state:
     st.session_state.imagem_capturada = None
 if "resultado_analise" not in st.session_state:
@@ -82,20 +83,16 @@ if "hora_analise" not in st.session_state:
 
 # 4. FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS/DRIVE
 def enviar_log_sheets(webhook_url, dados):
-    """Envia os dados de registro e imagem via HTTP POST com retorno na tela"""
+    """Envia os dados de registro e imagem via HTTP POST"""
     if not webhook_url or "SUA_URL" in webhook_url:
-        st.warning("⚠️ URL do Webhook não configurada.")
         return False
     try:
-        res = requests.post(webhook_url, json=dados, timeout=15)
+        res = requests.post(webhook_url, json=dados, timeout=25)
         if res.status_code == 200 and "Sucesso" in res.text:
-            st.toast("☁️ Dados e imagem salvos no Google Drive e Sheets com sucesso!")
             return True
-        else:
-            st.error(f"⚠️ Erro ao salvar no Google: {res.text}")
-            return False
+        return False
     except Exception as e:
-        st.error(f"❌ Falha de conexão com o Webhook: {e}")
+        print(f"Erro ao enviar para o webhook: {e}")
         return False
 
 # 5. ESTILIZAÇÃO CSS
@@ -201,7 +198,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # CONFIGURAÇÕES NA SIDEBAR
 api_keys = []
 
@@ -232,7 +228,6 @@ if st.session_state.pagina > 1:
         raw_api_keys = st.sidebar.text_input("Chave(s) API do Gemini (separadas por vírgula):", type="password")
 
     api_keys = [k.strip() for k in raw_api_keys.split(",") if k.strip()] if raw_api_keys else []
-
 
 # ==============================================================================
 # PÁGINA 1: IDENTIFICAÇÃO DO VALIDADOR
@@ -291,7 +286,6 @@ if st.session_state.pagina == 1:
                     enviar_log_sheets(WEBHOOK_URL, log_login)
                     st.rerun()
 
-
 # ==============================================================================
 # PÁGINA 2: LIBERAÇÃO DO PRODUTO FINAL
 # ==============================================================================
@@ -305,7 +299,6 @@ elif st.session_state.pagina == 2:
     </div>
     """, unsafe_allow_html=True)
 
-    # URLs diretas das abas de OP (Poli e Inst/Revolução) e DUN
     GSHEET_OP_POLI_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=220654294"
     GSHEET_OP_INST_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=904615686"
     
@@ -506,14 +499,12 @@ elif st.session_state.pagina == 2:
                             "imagem_base64": imagem_b64
                         }
                         
-                        # Tenta enviar o log e exibe o feedback na tela
                         enviar_log_sheets(WEBHOOK_URL, log_liberacao)
                         
                         st.session_state.pagina = 3
                         st.rerun()
                     else:
                         st.error("Erro no processamento. Verifique as chaves API.")
-
 
 # ==============================================================================
 # PÁGINA 3: RESULTADO DA LIBERAÇÃO E PARECER TÉCNICO
