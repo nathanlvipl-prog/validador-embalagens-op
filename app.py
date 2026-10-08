@@ -269,7 +269,7 @@ elif st.session_state.pagina == 2:
     </div>
     """, unsafe_allow_html=True)
 
-    # URLs diretas das abas de OP (Poli e Inst/Revolução) e DUN
+    # URLs diretas das duas abas de OP (Poli e Inst/Revolução) e DUN
     GSHEET_OP_POLI_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=220654294"
     GSHEET_OP_INST_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=904615686"
     
@@ -300,7 +300,7 @@ elif st.session_state.pagina == 2:
     except Exception:
         pass
 
-    # Unifica as duas abas de OPs em um único DataFrame para consulta do Gemini
+    # Unifica as duas abas de OPs em um único DataFrame para o Gemini consultar
     lista_ops = [df for df in [dados_op_poli, dados_op_inst] if df is not None]
     if lista_ops:
         dados_op = pd.concat(lista_ops, ignore_index=True)
@@ -404,14 +404,14 @@ elif st.session_state.pagina == 2:
                     {contexto_op}
                     """
                     
-                    MODELO_VALIDO = "gemini-2.5-flash"
+                    MODELO_LITE = "gemini-3.5-flash-lite"
                     resposta = None
                     
                     for key in api_keys:
                         try:
                             client = genai.Client(api_key=key)
                             resposta = client.models.generate_content(
-                                model=MODELO_VALIDO,
+                                model=MODELO_LITE,
                                 contents=[image_otimizada, prompt]
                             )
                             if resposta and resposta.text:
@@ -492,9 +492,4 @@ elif st.session_state.pagina == 3:
                 st.session_state.resultado_analise = ""
                 st.rerun()
         with c2:
-            if st.button("🚪 SAIR DO SISTEMA", use_container_width=True):
-                st.session_state.pagina = 1
-                st.session_state.usuario_nome = ""
-                st.session_state.usuario_funcao = ""
-                st.session_state.usuario_matricula = ""
-                st.rerun()
+            if st.button("🚪 SAIR DO
