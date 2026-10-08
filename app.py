@@ -45,7 +45,7 @@ def converter_imagem_base64(img):
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS / DRIVE
 # ==============================================================================
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbz4WtIubREpDGkCzwjHhHJUn8lqiSUmxCdvYy2qCteEk6zQmbJWGhvIaaK2zKOiCAAegg/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxveohVoFHdb5UUcSFBq3N3Jh-V_2VEGMbwt0cCBpp92myghXb7XE90n0eQJPtLgaLybA/exec"
 
 st.set_page_config(
     page_title="Qualit3c - Liberação do Produto Final", 
@@ -82,13 +82,21 @@ if "hora_analise" not in st.session_state:
 
 # 4. FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS/DRIVE
 def enviar_log_sheets(webhook_url, dados):
-    """Envia os dados de registro e imagem via HTTP POST para o Apps Script"""
+    """Envia os dados de registro e imagem via HTTP POST com retorno na tela"""
     if not webhook_url or "SUA_URL" in webhook_url:
-        return
+        st.warning("⚠️ URL do Webhook não configurada.")
+        return False
     try:
-        requests.post(webhook_url, json=dados, timeout=10)
+        res = requests.post(webhook_url, json=dados, timeout=15)
+        if res.status_code == 200 and "Sucesso" in res.text:
+            st.toast("☁️ Dados e imagem salvos no Google Drive e Sheets com sucesso!")
+            return True
+        else:
+            st.error(f"⚠️ Erro ao salvar no Google: {res.text}")
+            return False
     except Exception as e:
-        print(f"Erro ao enviar dados para o webhook: {e}")
+        st.error(f"❌ Falha de conexão com o Webhook: {e}")
+        return False
 
 # 5. ESTILIZAÇÃO CSS
 st.markdown("""
@@ -400,7 +408,7 @@ elif st.session_state.pagina == 2:
                     DIRETRIZES DE LEITURA OCR EXTREMAMENTE RIGOROSAS:
                     1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE E VALIDADE:
                        - Examine a impressão inkjet caractere por caractere.
-                       - Identifique explicitamente: Validade (ex: 08.10.27), Código/Nome da Máquina (ex: B22) e Lote (ex: L1098542).
+                       - Identifique explicitamente: Validade (ex: 08.10.27), Código/Nome da Máquina (ex: B22 ou M028) e Lote (ex: L1098542).
                        - Se o lote no refil não estiver visível, use o lote da caixa.
 
                     2. ESTRUTURA DO RELATÓRIO DE SAÍDA:
@@ -437,7 +445,6 @@ elif st.session_state.pagina == 2:
                        3. DADOS FORMATADOS PARA O NOME DO ARQUIVO:
                        Adicione ao final a linha exata (substituindo com os dados extraídos):
                        TAG_DRIVE_INFO: VALIDADE=[val] MAQUINA=[maq] LOTE=[lote]
-                       (Exemplo: TAG_DRIVE_INFO: VALIDADE=08.10.27 MAQUINA=B22 LOTE=L1098542)
 
                     {contexto_op}
                     """
@@ -467,7 +474,7 @@ elif st.session_state.pagina == 2:
                         
                         match_tag = re.search(r"TAG_DRIVE_INFO:\s*VALIDADE=(.*?)\s+MAQUINA=(.*?)\s+LOTE=(.*)", parecer_texto)
                         if match_tag:
-                            validade_ext = match_tag.group(1).strip()
+                            validade_ext = match_tag.group(1).strip().replace("/", ".")
                             maquina_ext = match_tag.group(2).strip()
                             lote_ext = match_tag.group(3).strip()
                         
@@ -476,7 +483,7 @@ elif st.session_state.pagina == 2:
                             partes_nome.append(maquina_ext)
                         
                         if not lote_ext.startswith("L"):
-                            lote_ext = f"L {lote_ext}"
+                            lote_ext = f"L{lote_ext}"
                         partes_nome.append(lote_ext)
                         partes_nome.append("RN.jpg")
                         
@@ -486,7 +493,6 @@ elif st.session_state.pagina == 2:
                         st.session_state.imagem_capturada = image
                         st.session_state.resultado_analise = parecer_texto
                         st.session_state.hora_analise = hora_foto
-                        st.session_state.pagina = 3
                         
                         log_liberacao = {
                             "data_hora": hora_foto,
@@ -499,7 +505,11 @@ elif st.session_state.pagina == 2:
                             "nome_arquivo": nome_arquivo_drive,
                             "imagem_base64": imagem_b64
                         }
+                        
+                        # Tenta enviar o log e exibe o feedback na tela
                         enviar_log_sheets(WEBHOOK_URL, log_liberacao)
+                        
+                        st.session_state.pagina = 3
                         st.rerun()
                     else:
                         st.error("Erro no processamento. Verifique as chaves API.")
