@@ -4,15 +4,43 @@ from PIL import Image
 from google import genai
 from datetime import datetime, timezone, timedelta
 import requests
+import io
+import base64
+import re
 
 # ==============================================================================
-# CONFIGURAÇÃO DE FUSO HORÁRIO BRASIL (UTC-3)
+# CONFIGURAÇÃO DE FUSO HORÁRIO BRASIL (UTC-3) E CÁLCULO DE TURNO
 # ==============================================================================
 FUSO_BR = timezone(timedelta(hours=-3))
 
+def obter_datetime_br():
+    """Retorna o objeto datetime atual no fuso horário do Brasil (UTC-3)"""
+    return datetime.now(FUSO_BR)
+
 def obter_hora_atual():
     """Retorna data e hora formatadas no fuso horário do Brasil (UTC-3)"""
-    return datetime.now(FUSO_BR).strftime("%d/%m/%Y %H:%M:%S")
+    return obter_datetime_br().strftime("%d/%m/%Y %H:%M:%S")
+
+def calcular_turno(dt=None):
+    """Calcula o turno com base nos intervalos de horário definidos"""
+    if dt is None:
+        dt = obter_datetime_br()
+    
+    minutos_totais = dt.hour * 60 + dt.minute
+    
+    # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
+    if 340 <= minutos_totais < 840:
+        return "Turno A"
+    elif 840 <= minutos_totais < 1340:
+        return "Turno B"
+    else:
+        return "Turno C"
+
+def converter_imagem_base64(img):
+    """Converte a imagem PIL otimizada para string Base64"""
+    buffered = io.BytesIO()
+    img.convert("RGB").save(buffered, format="JPEG", quality=85)
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # ==============================================================================
 # CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
@@ -52,15 +80,15 @@ if "resultado_analise" not in st.session_state:
 if "hora_analise" not in st.session_state:
     st.session_state.hora_analise = ""
 
-# 4. FUNÇÃO PARA ENVIAR LOGS PARA O GOOGLE SHEETS
+# 4. FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS/DRIVE
 def enviar_log_sheets(webhook_url, dados):
-    """Envia os dados de registro via HTTP POST para o Google Apps Script"""
+    """Envia os dados de registro e imagem via HTTP POST para o Apps Script"""
     if not webhook_url or "SUA_URL" in webhook_url:
         return
     try:
-        requests.post(webhook_url, json=dados, timeout=5)
+        requests.post(webhook_url, json=dados, timeout=10)
     except Exception as e:
-        print(f"Erro ao salvar registro no Google Sheets: {e}")
+        print(f"Erro ao enviar dados para o webhook: {e}")
 
 # 5. ESTILIZAÇÃO CSS
 st.markdown("""
@@ -300,7 +328,6 @@ elif st.session_state.pagina == 2:
     except Exception:
         pass
 
-    # Unifica as duas abas de OPs em um único DataFrame para consulta do Gemini
     lista_ops = [df for df in [dados_op_poli, dados_op_inst] if df is not None]
     if lista_ops:
         dados_op = pd.concat(lista_ops, ignore_index=True)
@@ -351,10 +378,11 @@ elif st.session_state.pagina == 2:
             st.write(" ")
             st.write(" ")
             if st.button("🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True):
-                with st.spinner("⚡ Executando análise de P.A...."):
-                    hora_foto = obter_hora_atual()
+                with st.spinner("⚡ Executando análise de P.A. e enviando ao Drive..."):
+                    dt_now = obter_datetime_br()
+                    hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
+                    turno_atual = calcular_turno(dt_now)
                     
-                    # Manter alta resolução para permitir leitura precisa de inkjet
                     image_otimizada = image.copy()
                     if image_otimizada.width > 2048 or image_otimizada.height > 2048:
                         image_otimizada.thumbnail((2048, 2048))
@@ -370,11 +398,10 @@ elif st.session_state.pagina == 2:
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
                     DIRETRIZES DE LEITURA OCR EXTREMAMENTE RIGOROSAS:
-                    1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE:
-                       - Examine a impressão inkjet caractere por caractere (ex: preste atenção no último dígito se é '2', '3' ou '8').
-                       - Na caixa secundária, localize o número após o prefixo 'L' (ex: L1098542).
-                       - No refil/embalagem primária, verifique os caracteres impressos. SE O LOTE DO REFIL NÃO ESTIVER TOTALMENTE VISÍVEL OU ESTIVER DOBRADO/ILEGÍVEL, declare "Não visível / Ilegível na foto" em vez de inventar ou adivinhar dígitos.
-                       - NUNCA aponte divergência de lote a menos que os caracteres visíveis sejam comprovadamente e inequivocamente diferentes. Se forem idênticos, marque como CONFORME.
+                    1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE E VALIDADE:
+                       - Examine a impressão inkjet caractere por caractere.
+                       - Identifique explicitamente: Validade (ex: 08.10.27), Código/Nome da Máquina (ex: B22) e Lote (ex: L1098542).
+                       - Se o lote no refil não estiver visível, use o lote da caixa.
 
                     2. ESTRUTURA DO RELATÓRIO DE SAÍDA:
                        Gere o texto estritamente nesta estrutura:
@@ -384,7 +411,7 @@ elif st.session_state.pagina == 2:
                             ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
                           - Se reprovado:
                             ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
-                            **Motivo da Não Conformidade:** [Descreva o erro de forma concisa em uma frase].
+                            **Motivo da Não Conformidade:** [Descreva o erro em uma frase concisa].
 
                        2. TÓPICOS 1 E 2 (DENTRO DE BLOCOS <details>):
 
@@ -395,17 +422,22 @@ elif st.session_state.pagina == 2:
                        - **Código SKU:** [SKU lido]
                        - **Código DUN-14:** [DUN lido]
                        - **Lote da Caixa (Secundária):** [Lote lido na caixa]
-                       - **Lote do Refil (Primária):** [Lote lido no refil ou 'Não visível/Ilegível na foto']
+                       - **Lote do Refil (Primária):** [Lote lido no refil]
                        - **Data de Validade:** [Validade lida]
                        </details>
 
                        <details>
                        <summary>📁 <b>2. Regras de Validação</b></summary>
 
-                       - **Consistência de Lote:** [Status do lote - Se o do refil não for visível, considere conforme com a caixa ou informe que depende de verificação visual rápida]
+                       - **Consistência de Lote:** [Status do lote]
                        - **Validação do DUN-14:** [Status do DUN]
                        - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
                        </details>
+
+                       3. DADOS FORMATADOS PARA O NOME DO ARQUIVO:
+                       Adicione ao final a linha exata (substituindo com os dados extraídos):
+                       TAG_DRIVE_INFO: VALIDADE=[val] MAQUINA=[maq] LOTE=[lote]
+                       (Exemplo: TAG_DRIVE_INFO: VALIDADE=08.10.27 MAQUINA=B22 LOTE=L1098542)
 
                     {contexto_op}
                     """
@@ -429,6 +461,32 @@ elif st.session_state.pagina == 2:
                         parecer_texto = resposta.text
                         status_final = "APROVADO" if "PRODUTO CONFORME" in parecer_texto else "REPROVADO"
                         
+                        # Extrai informações para montar o nome da foto
+                        validade_ext = "00.00.00"
+                        maquina_ext = ""
+                        lote_ext = "L0000000"
+                        
+                        match_tag = re.search(r"TAG_DRIVE_INFO:\s*VALIDADE=(.*?)\s+MAQUINA=(.*?)\s+LOTE=(.*)", parecer_texto)
+                        if match_tag:
+                            validade_ext = match_tag.group(1).strip()
+                            maquina_ext = match_tag.group(2).strip()
+                            lote_ext = match_tag.group(3).strip()
+                        
+                        # Formata o nome da imagem conforme o padrão desejado
+                        # Ex: "Turno C 08.10.27 B22 L1098542 RN.jpg"
+                        partes_nome = [turno_atual, validade_ext]
+                        if maquina_ext:
+                            partes_nome.append(maquina_ext)
+                        
+                        # Garante formatação do Lote ("L 1098542" ou "L1098542")
+                        if not lote_ext.startswith("L"):
+                            lote_ext = f"L {lote_ext}"
+                        partes_nome.append(lote_ext)
+                        partes_nome.append("RN.jpg")
+                        
+                        nome_arquivo_drive = " ".join(partes_nome)
+                        imagem_b64 = converter_imagem_base64(image_otimizada)
+                        
                         st.session_state.imagem_capturada = image
                         st.session_state.resultado_analise = parecer_texto
                         st.session_state.hora_analise = hora_foto
@@ -441,7 +499,9 @@ elif st.session_state.pagina == 2:
                             "nome": st.session_state.usuario_nome,
                             "funcao": st.session_state.usuario_funcao,
                             "status": status_final,
-                            "detalhes": parecer_texto[:400].replace("\n", " ")
+                            "detalhes": parecer_texto[:400].replace("\n", " "),
+                            "nome_arquivo": nome_arquivo_drive,
+                            "imagem_base64": imagem_b64
                         }
                         enviar_log_sheets(WEBHOOK_URL, log_liberacao)
                         st.rerun()
