@@ -40,14 +40,14 @@ def calcular_turno(dt=None):
 
 
 def extrair_apenas_digitos(texto):
-  """Remove tudo que não for dígito numérico"""
+  """Remove tudo o que não for dígito numérico"""
   if not texto:
     return ""
   return re.sub(r"\D", "", str(texto))
 
 
 def extrair_lote_numerico(texto):
-  """Extrai estritamente a numeração do lote (6 a 8 dígitos), descartando horários, máquinas e sufixos."""
+  """Extrai estritamente a numeração do lote (6 a 8 dígitos), descartando horários e códigos."""
   if not texto:
     return ""
 
@@ -67,14 +67,21 @@ def extrair_lote_numerico(texto):
   return digitos
 
 
-def validar_dun14(dun_lido, dados_dun=None):
-  """Valida se o DUN-14 possui 14 dígitos e se existe na planilha de cadastro."""
-  digitos = extrair_apenas_digitos(dun_lido)
-  if not digitos:
+def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
+  """Valida o código DUN-14 apenas se o produto possuir etiqueta colada."""
+  if not tem_etiqueta:
     return (
-        False,
-        "Código DUN-14 não identificado na etiqueta.",
-        "Não Identificado",
+        True,
+        "",
+        "Não Aplicável (Sem Etiqueta - Impressão Direta na Caixa)",
+    )
+
+  digitos = extrair_apenas_digitos(dun_lido)
+  if not digitos or "NAO" in str(dun_lido).upper():
+    return (
+        True,
+        "",
+        "Não Aplicável (Produto sem Etiqueta de Código de Barras)",
     )
 
   # Checagem estrita de comprimento (DUN-14 tem obrigatoriamente 14 dígitos)
@@ -83,26 +90,26 @@ def validar_dun14(dun_lido, dados_dun=None):
         False,
         (
             f"Código DUN-14 na etiqueta ({digitos}) possui {len(digitos)}"
-            " dígitos (esperado 14 dígitos). Faltando dígito na impressão da"
-            " etiqueta."
+            " dígitos (esperado 14 dígitos). Impressão incompleta."
         ),
         f"Não Conforme ({len(digitos)} dígitos - Esperado 14)",
     )
 
-  # Cruzamento com a tabela de cadastro de DUNs (se disponível)
+  # Cruzamento com a tabela de cadastro de DUNs (lida estritamente como String)
   if dados_dun is not None and not dados_dun.empty:
     dun_encontrado = False
     for col in dados_dun.columns:
-      valores_col = (
+      col_valores = (
           dados_dun[col]
           .dropna()
           .astype(str)
           .apply(extrair_apenas_digitos)
           .values
       )
-      if digitos in valores_col:
+      if digitos in col_valores:
         dun_encontrado = True
         break
+
     if not dun_encontrado:
       return (
           False,
@@ -113,7 +120,7 @@ def validar_dun14(dun_lido, dados_dun=None):
           "Não Conforme (Fora do Cadastro)",
       )
 
-  return True, "", "Conforme (14 dígitos validados)"
+  return True, "", "Conforme (14 dígitos validados na tabela)"
 
 
 def formatar_validade(val_str):
@@ -422,9 +429,10 @@ elif st.session_state.pagina == 2:
       f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
   )
 
+  # Força a leitura das colunas como STRING estrita (evita notação científica no DUN)
   @st.cache_data(ttl=60)
   def carregar_dados_gsheet(url):
-    return pd.read_csv(url)
+    return pd.read_csv(url, dtype=str)
 
   dados_op_poli = None
   dados_op_inst = None
@@ -513,18 +521,20 @@ elif st.session_state.pagina == 2:
                     Você é um motor de OCR industrial especialista em embalagens alimentícias.
                     Examine a IMAGEM ATUAL fornecida e extraia as informações estritamente como estão impressas.
 
-                    ATENÇÃO AO CÓDIGO DUN-14:
-                    - Transcreva TODOS os dígitos do DUN-14 impresso na etiqueta (ex: 1781018427688). Não adicione nem corrija dígitos por conta própria.
+                    INSTRUÇÃO CRÍTICA DE DETECÇÃO DE ETIQUETA:
+                    - TEM_ETIQUETA: Indique 'SIM' se houver uma etiqueta branca/adesivo colada na caixa (ex: etiqueta de código de barras). Indique 'NAO' se for apenas impressão direta no papelão da caixa.
+                    - DUN: Se TEM_ETIQUETA for SIM, extraia os dígitos do DUN-14. Se for NAO, informe 'NAO_APLICAVEL'.
 
                     Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
                     DESCRICAO: [Nome do produto]
                     SKU: [Código SKU]
-                    DUN: [Código DUN-14 impresso na etiqueta]
+                    TEM_ETIQUETA: [SIM ou NAO]
+                    DUN: [Código DUN-14 da etiqueta ou NAO_APLICAVEL]
                     VALIDADE: [Data de validade]
                     MAQUINA: [Código da máquina/linha, ex: ML01, B22]
                     LOTE_CAIXA: [Apenas os números do lote da caixa]
-                    LOTE_REFIL: [Apenas os números do lote do refil ou 'NAO_VISIVEL']
+                    LOTE_REFIL: [Apenas os números do lote do refil ou NAO_VISIVEL]
                     """
 
           MODELO_LITE = "gemini-3.5-flash-lite"
@@ -550,7 +560,10 @@ elif st.session_state.pagina == 2:
 
             descricao_lida = get_field("DESCRICAO", "Produto Industrial")
             sku_lido = get_field("SKU", "")
-            dun_lido = get_field("DUN", "")
+            tem_etiqueta_raw = get_field("TEM_ETIQUETA", "NAO")
+            tem_etiqueta = "SIM" in tem_etiqueta_raw.upper()
+
+            dun_lido = get_field("DUN", "NAO_APLICAVEL")
             validade_lida = get_field("VALIDADE", "")
             maquina_lida = get_field("MAQUINA", "")
             lote_cx_raw = get_field("LOTE_CAIXA", "")
@@ -575,9 +588,9 @@ elif st.session_state.pagina == 2:
                     f" ({digitos_refil})."
                 )
 
-            # 2. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 EM PYTHON
+            # 2. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 (Apenas se houver etiqueta)
             dun_conforme, motivo_dun, status_dun_msg = validar_dun14(
-                dun_lido, dados_dun
+                dun_lido, tem_etiqueta, dados_dun
             )
             if not dun_conforme:
               motivos_reprovacao.append(motivo_dun)
@@ -622,6 +635,10 @@ elif st.session_state.pagina == 2:
 
             nome_arquivo_drive = " ".join(partes_nome)
 
+            dun_exibicao = (
+                dun_lido if tem_etiqueta else "Não Aplicável (Sem Etiqueta)"
+            )
+
             parecer_exibicao = f"""{cabecalho_status}
 {subtitulo_motivo}
 <details>
@@ -629,7 +646,7 @@ elif st.session_state.pagina == 2:
 
 - **Descrição do Produto:** {descricao_lida}
 - **Código SKU:** {sku_lido}
-- **Código DUN-14:** {dun_lido if dun_lido else "Não identificado"}
+- **Código DUN-14:** {dun_exibicao}
 - **Lote da Caixa (Secundária):** {lote_cx_exibicao}
 - **Lote do Refil (Primária):** {lote_refil_exibicao}
 - **Data de Validade:** {validade_lida}
