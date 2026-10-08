@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from PIL import Image
-import google.generativeai as genai
+from google import genai
 from datetime import datetime, timezone, timedelta
 import requests
 
@@ -271,48 +271,32 @@ elif st.session_state.pagina == 2:
 
     SHEET_OP_ID = "1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E"
     SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
-
-    # FUNÇÃO QUE LÊ TODAS AS ABAS DA PLANILHA DE OPs (POLI, INST, REVOLUÇÃO, etc.)
-    @st.cache_data(ttl=60)
-    def carregar_todas_abas_op(sheet_id):
-        try:
-            url_xlsx = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
-            dict_abas = pd.read_excel(url_xlsx, sheet_name=None)
-            lista_dfs = []
-            for nome_aba, df in dict_abas.items():
-                if not df.empty:
-                    df_limpo = df.dropna(how="all").copy()
-                    if not df_limpo.empty:
-                        df_limpo["PLANTA_ABA"] = nome_aba
-                        lista_dfs.append(df_limpo)
-            if lista_dfs:
-                return pd.concat(lista_dfs, ignore_index=True)
-            return pd.DataFrame()
-        except Exception:
-            return pd.DataFrame()
+    GSHEET_OP_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_OP_ID}/export?format=csv"
+    GSHEET_DUN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
 
     @st.cache_data(ttl=60)
-    def carregar_dados_dun(sheet_id):
-        try:
-            url_csv = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-            return pd.read_csv(url_csv)
-        except Exception:
-            return pd.DataFrame()
+    def carregar_dados_gsheet(url):
+        return pd.read_csv(url)
 
-    dados_op = carregar_todas_abas_op(SHEET_OP_ID)
-    dados_dun = carregar_dados_dun(SHEET_DUN_ID)
+    dados_op = None
+    dados_dun = None
+    try:
+        dados_op = carregar_dados_gsheet(GSHEET_OP_URL)
+        dados_dun = carregar_dados_gsheet(GSHEET_DUN_URL)
+    except Exception:
+        pass
 
-    with st.expander("📋 Tabela de Referência para Liberação (OPs de Todas as Plantas e SKUs)"):
+    with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Ordem de Produção (Todas as Plantas/Abas)")
-            if not dados_op.empty:
+            st.subheader("Ordem de Produção (OP)")
+            if dados_op is not None:
                 st.dataframe(dados_op, use_container_width=True)
             else:
                 st.info("Planilha de OPs em carregamento...")
         with col2:
             st.subheader("Cadastro SKU x DUN")
-            if not dados_dun.empty:
+            if dados_dun is not None:
                 st.dataframe(dados_dun, use_container_width=True)
             else:
                 st.info("Planilha de DUNs em carregamento...")
@@ -345,9 +329,9 @@ elif st.session_state.pagina == 2:
                     image_otimizada.thumbnail((1024, 1024))
                     
                     contexto_op = ""
-                    if not dados_op.empty:
-                        contexto_op += f"\n\n--- TABELA DE ORDENS DE PRODUÇÃO (TODAS AS PLANTAS/ABAS) ---\n{dados_op.to_string(index=False)}"
-                    if not dados_dun.empty:
+                    if dados_op is not None:
+                        contexto_op += f"\n\n--- TABELA DE ORDEM DE PRODUÇÃO (OP) ATIVA ---\n{dados_op.to_string(index=False)}"
+                    if dados_dun is not None:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
                     prompt = f"""
@@ -381,23 +365,26 @@ elif st.session_state.pagina == 2:
 
                     - **Consistência de Lote:** [Status do lote]
                     - **Validação do DUN-14:** [Status do DUN]
-                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela consolidada de OPs de todas as plantas]
+                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
                     </details>
 
                     REGRAS CRÍTICAS DE VALIDAÇÃO:
                     - Se o Lote da Caixa for diferente do Lote do Refil -> REPROVAR IMEDIATAMENTE e detalhar no Motivo da Não Conformidade.
                     - Se o DUN não possuir exatamente 14 dígitos numéricos -> REPROVAR IMEDIATAMENTE.
-                    - Se o SKU ou DUN não corresponderem às tabelas ativas (considerando todas as abas/plantas) -> REPROVAR IMEDIATAMENTE.
+                    - Se o SKU ou DUN não corresponderem às tabelas ativas -> REPROVAR IMEDIATAMENTE.
                     {contexto_op}
                     """
                     
+                    MODELO_LITE = "gemini-3.5-flash-lite"
                     resposta = None
+                    
                     for key in api_keys:
                         try:
-                            genai.configure(api_key=key)
-                            # Utilize exatamente a string de modelo que você usava anteriormente (ex: 'gemini-1.5-flash', 'gemini-1.5-pro', etc.)
-                            model = genai.GenerativeModel('gemini-1.5-flash')
-                            resposta = model.generate_content([image_otimizada, prompt])
+                            client = genai.Client(api_key=key)
+                            resposta = client.models.generate_content(
+                                model=MODELO_LITE,
+                                contents=[image_otimizada, prompt]
+                            )
                             if resposta and resposta.text:
                                 break
                         except Exception:
