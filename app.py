@@ -40,18 +40,35 @@ def calcular_turno(dt=None):
     return "Turno C"
 
 
-def extrair_apenas_digitos(texto):
-  """Remove tudo que não for dígito numérico"""
+def extrair_lote_numerico(texto):
+  """Extrai estritamente a numeração do lote (6 a 8 dígitos), descartando horários (ex: 03:21), códigos de máquina (ex: ML01, B22) e sufixos (RN)."""
   if not texto:
     return ""
-  return re.sub(r"\D", "", str(texto))
+
+  texto_str = str(texto)
+
+  # 1. Procura por "L" ou "LOTE" seguido de 6 a 8 dígitos (ex: L1098673 ou L 1098673)
+  match_l = re.search(r"L(?:OTE)?\s*(\d{6,8})", texto_str, re.IGNORECASE)
+  if match_l:
+    return match_l.group(1)
+
+  # 2. Procura qualquer sequência isolada de 6 a 8 dígitos
+  match_seq = re.search(r"\b\d{6,8}\b", texto_str)
+  if match_seq:
+    return match_seq.group(0)
+
+  # 3. Fallback: extrai apenas os dígitos e limita aos 7 primeiros se houver horário concatenado
+  digitos = re.sub(r"\D", "", texto_str)
+  if len(digitos) > 8:
+    return digitos[:7]
+  return digitos
 
 
 def formatar_validade(val_str):
   """Garante a formatação com pontos (ex: 08.10.2027)"""
   if not val_str:
     return "00.00.0000"
-  digitos = extrair_apenas_digitos(val_str)
+  digitos = re.sub(r"\D", "", str(val_str))
   if len(digitos) == 8:
     return f"{digitos[:2]}.{digitos[2:4]}.{digitos[4:]}"
   elif len(digitos) == 6:
@@ -61,14 +78,11 @@ def formatar_validade(val_str):
 
 
 def formatar_lote(lote_raw):
-  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098396)"""
-  digitos = extrair_apenas_digitos(lote_raw)
+  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098673)"""
+  digitos = extrair_lote_numerico(lote_raw)
   if digitos:
     return f"L {digitos}"
-  lote_clean = str(lote_raw).strip()
-  if lote_clean.upper().startswith("L"):
-    return f"L {lote_clean[1:].strip()}"
-  return f"L {lote_clean}" if lote_clean else "L 0000000"
+  return "L 0000000"
 
 
 def converter_imagem_base64(img):
@@ -434,7 +448,7 @@ elif st.session_state.pagina == 2:
       if st.button(
           "🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True
       ):
-        with st.spinner("⚡ Leitura OCR de alta velocidade e precisão..."):
+        with st.spinner("⚡ Leitura OCR de alta precisão..."):
           dt_now = obter_datetime_br()
           hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
           turno_atual = calcular_turno(dt_now)
@@ -445,21 +459,21 @@ elif st.session_state.pagina == 2:
 
           prompt_ocr = """
                     Você é um motor de OCR industrial especialista em embalagens alimentícias.
-                    Examine estritamente a IMAGEM ATUAL fornecida e extraia as informações exatas sem interpretar regras de negócio ou inventar dados.
+                    Examine a IMAGEM ATUAL fornecida e extraia as informações numéricas de lote.
 
-                    ATENÇÃO PARA TEXTOS ROTACIONADOS / VERTICAIS:
-                    - O texto na embalagem primária (refil/lata/sachê) pode estar impresso na vertical ou rotacionado a 90°. Escaneie todas as orientações.
-                    - Leia a impressão inkjet caractere por caractere (ex: 1098396).
+                    INSTRUÇÕES CRÍTICAS DE EXTRAÇÃO DO LOTE:
+                    - LOTE_CAIXA: Informe APENAS o código numérico do lote impresso na caixa secundária (ex: se estiver L1098673 RN, extraia apenas 1098673).
+                    - LOTE_REFIL: Informe APENAS o código numérico do lote impresso no refil (ex: se estiver L1098673 RN 03:21, extraia APENAS o lote 1098673, ignorando totalmente horários como 03:21, códigos de máquina como ML01 e o sufixo RN).
 
-                    Retorne ESTRITAMENTE o texto abaixo preenchido com as informações lidas na imagem:
+                    Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
-                    DESCRICAO: [Nome do produto na caixa/embalagem]
-                    SKU: [Código SKU lido na embalagem]
-                    DUN: [Código DUN-14 lido]
-                    VALIDADE: [Data de validade lida]
-                    MAQUINA: [Código da máquina/linha, ex: B22, M028, etc.]
-                    LOTE_CAIXA: [Lote impresso na caixa secundária/etiqueta]
-                    LOTE_REFIL: [Lote impresso na embalagem primária/refil/lata ou 'NAO_VISIVEL']
+                    DESCRICAO: [Nome do produto]
+                    SKU: [Código SKU]
+                    DUN: [Código DUN-14]
+                    VALIDADE: [Data de validade]
+                    MAQUINA: [Código da máquina/linha, ex: ML01, B22]
+                    LOTE_CAIXA: [Apenas os números do lote da caixa]
+                    LOTE_REFIL: [Apenas os números do lote do refil ou 'NAO_VISIVEL']
                     """
 
           MODELO_LITE = "gemini-3.5-flash-lite"
@@ -479,7 +493,6 @@ elif st.session_state.pagina == 2:
           if resposta and resposta.text:
             raw_ocr = resposta.text
 
-            # --- EXTRAÇÃO VIA REGEX ---
             def get_field(field_name, default=""):
               m = re.search(rf"{field_name}:\s*(.*)", raw_ocr, re.IGNORECASE)
               return m.group(1).strip() if m else default
@@ -492,14 +505,14 @@ elif st.session_state.pagina == 2:
             lote_cx_raw = get_field("LOTE_CAIXA", "")
             lote_refil_raw = get_field("LOTE_REFIL", "")
 
-            # --- PROCESSAMENTO DETERMINÍSTICO DE DÍGITOS EM PYTHON ---
-            digitos_cx = extrair_apenas_digitos(lote_cx_raw)
-            digitos_refil = extrair_apenas_digitos(lote_refil_raw)
+            # --- PROCESSAMENTO DETERMINÍSTICO DE LOTE EM PYTHON ---
+            digitos_cx = extrair_lote_numerico(lote_cx_raw)
+            digitos_refil = extrair_lote_numerico(lote_refil_raw)
 
             # Lote base numérico
             lote_num_base = digitos_cx if digitos_cx else digitos_refil
 
-            # Validação determinística de consistência de Lote
+            # Validação determinística do Lote
             lote_conforme = True
             motivo_nao_conformidade = ""
 
@@ -515,17 +528,16 @@ elif st.session_state.pagina == 2:
                     f" ({digitos_cx}) x Refil/Lata ({digitos_refil})."
                 )
 
-            # Refil não visível ou idêntico
             lote_refil_exibicao = (
                 f"L {digitos_refil}"
                 if digitos_refil
                 else "Lote idêntico à caixa (Refil sobreposto)"
             )
             lote_cx_exibicao = (
-                f"L {digitos_cx}" if digitos_cx else lote_cx_raw
+                f"L {digitos_cx}" if digitos_cx else f"L {lote_cx_raw}"
             )
 
-            # --- VALIDAÇÃO DETERMINÍSTICA DO PARECER FINAL ---
+            # Parecer final do Python
             if lote_conforme:
               status_final = "APROVADO"
               cabecalho_status = "### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA"
@@ -539,7 +551,7 @@ elif st.session_state.pagina == 2:
                   f"\n**Motivo da Não Conformidade:** {motivo_nao_conformidade}\n"
               )
 
-            # --- CONSTRUÇÃO DO NOME DO ARQUIVO DRIVE ---
+            # Construção do nome do arquivo Drive
             val_formatada = formatar_validade(validade_lida)
             lote_formatado_drive = formatar_lote(lote_num_base)
 
@@ -551,7 +563,6 @@ elif st.session_state.pagina == 2:
 
             nome_arquivo_drive = " ".join(partes_nome)
 
-            # --- MONTAGEM LIMPA DO RELATÓRIO PARA O SITE ---
             parecer_exibicao = f"""{cabecalho_status}
 {subtitulo_motivo}
 <details>
