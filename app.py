@@ -36,6 +36,25 @@ def calcular_turno(dt=None):
     else:
         return "Turno C"
 
+def formatar_validade(val_str):
+    """Garante que a validade fique com pontos (ex: 06.10.2027 ou 06.10.27)"""
+    val_clean = val_str.strip().replace("/", ".").replace("-", ".")
+    digitos = re.sub(r"\D", "", val_clean)
+    if len(digitos) == 8:
+        return f"{digitos[:2]}.{digitos[2:4]}.{digitos[4:]}"
+    elif len(digitos) == 6:
+        return f"{digitos[:2]}.{digitos[2:4]}.20{digitos[4:]}"
+    return val_clean
+
+def formatar_lote(lote_str):
+    """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098492)"""
+    lote_clean = lote_str.strip()
+    if re.match(r"^L\d+", lote_clean, re.IGNORECASE):
+        return f"L {lote_clean[1:].strip()}"
+    elif not lote_clean.upper().startswith("L"):
+        return f"L {lote_clean}"
+    return lote_clean
+
 def converter_imagem_base64(img):
     """Otimiza e converte a imagem PIL para string Base64 compacta"""
     img_copia = img.copy()
@@ -402,7 +421,7 @@ elif st.session_state.pagina == 2:
                     DIRETRIZES DE LEITURA OCR EXTREMAMENTE RIGOROSAS:
                     1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE E VALIDADE:
                        - Examine a impressão inkjet caractere por caractere.
-                       - Identifique explicitamente: Validade (ex: 08.10.27), Código/Nome da Máquina (ex: B22 ou M028) e Lote (ex: L1098542).
+                       - Identifique explicitamente: Validade (ex: 06.10.2027), Código/Nome da Máquina (ex: B22 ou M028) e Lote (ex: 1098492).
                        - Se o lote no refil não estiver visível, use o lote da caixa.
 
                     2. ESTRUTURA DO RELATÓRIO DE SAÍDA:
@@ -462,30 +481,31 @@ elif st.session_state.pagina == 2:
                         parecer_texto = resposta.text
                         status_final = "APROVADO" if "PRODUTO CONFORME" in parecer_texto else "REPROVADO"
                         
-                        validade_ext = "00.00.00"
+                        validade_ext = "00.00.0000"
                         maquina_ext = ""
-                        lote_ext = "L0000000"
+                        lote_ext = "L 0000000"
                         
                         match_tag = re.search(r"TAG_DRIVE_INFO:\s*VALIDADE=(.*?)\s+MAQUINA=(.*?)\s+LOTE=(.*)", parecer_texto)
                         if match_tag:
-                            validade_ext = match_tag.group(1).strip().replace("/", ".")
+                            validade_ext = formatar_validade(match_tag.group(1))
                             maquina_ext = match_tag.group(2).strip()
-                            lote_ext = match_tag.group(3).strip()
+                            lote_ext = formatar_lote(match_tag.group(3))
                         
                         partes_nome = [turno_atual, validade_ext]
                         if maquina_ext:
                             partes_nome.append(maquina_ext)
                         
-                        if not lote_ext.startswith("L"):
-                            lote_ext = f"L{lote_ext}"
                         partes_nome.append(lote_ext)
                         partes_nome.append("RN.jpg")
                         
                         nome_arquivo_drive = " ".join(partes_nome)
                         imagem_b64 = converter_imagem_base64(image_otimizada)
                         
+                        # Oculta a linha TAG_DRIVE_INFO do texto exibido no site
+                        parecer_exibicao = re.sub(r"TAG_DRIVE_INFO:.*", "", parecer_texto, flags=re.DOTALL).strip()
+                        
                         st.session_state.imagem_capturada = image
-                        st.session_state.resultado_analise = parecer_texto
+                        st.session_state.resultado_analise = parecer_exibicao
                         st.session_state.hora_analise = hora_foto
                         
                         log_liberacao = {
@@ -495,7 +515,7 @@ elif st.session_state.pagina == 2:
                             "nome": st.session_state.usuario_nome,
                             "funcao": st.session_state.usuario_funcao,
                             "status": status_final,
-                            "detalhes": parecer_texto[:400].replace("\n", " "),
+                            "detalhes": parecer_exibicao[:400].replace("\n", " "),
                             "nome_arquivo": nome_arquivo_drive,
                             "imagem_base64": imagem_b64
                         }
