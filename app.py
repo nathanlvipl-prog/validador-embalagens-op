@@ -43,9 +43,9 @@ def converter_imagem_base64(img):
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # ==============================================================================
-# CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS
+# CONFIGURAÇÃO GERAL E LINK DO WEBHOOK GOOGLE SHEETS / DRIVE
 # ==============================================================================
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbw9uZ1tZ1XBK3PoQu_6JGkkpEzHLNmXMsIlbUnVBVw2OUxsP1GwHk8ZsJ1WU0eLIXftwg/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbz4WtIubREpDGkCzwjHhHJUn8lqiSUmxCdvYy2qCteEk6zQmbJWGhvIaaK2zKOiCAAegg/exec"
 
 st.set_page_config(
     page_title="Qualit3c - Liberação do Produto Final", 
@@ -461,7 +461,6 @@ elif st.session_state.pagina == 2:
                         parecer_texto = resposta.text
                         status_final = "APROVADO" if "PRODUTO CONFORME" in parecer_texto else "REPROVADO"
                         
-                        # Extrai informações para montar o nome da foto
                         validade_ext = "00.00.00"
                         maquina_ext = ""
                         lote_ext = "L0000000"
@@ -472,13 +471,10 @@ elif st.session_state.pagina == 2:
                             maquina_ext = match_tag.group(2).strip()
                             lote_ext = match_tag.group(3).strip()
                         
-                        # Formata o nome da imagem conforme o padrão desejado
-                        # Ex: "Turno C 08.10.27 B22 L1098542 RN.jpg"
                         partes_nome = [turno_atual, validade_ext]
                         if maquina_ext:
                             partes_nome.append(maquina_ext)
                         
-                        # Garante formatação do Lote ("L 1098542" ou "L1098542")
                         if not lote_ext.startswith("L"):
                             lote_ext = f"L {lote_ext}"
                         partes_nome.append(lote_ext)
