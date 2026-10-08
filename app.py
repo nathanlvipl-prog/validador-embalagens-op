@@ -40,7 +40,7 @@ def calcular_turno(dt=None):
 
 
 def extrair_apenas_digitos(texto):
-  """Remove tudo o que não for dígito numérico"""
+  """Remove tudo que não for dígito numérico"""
   if not texto:
     return ""
   return re.sub(r"\D", "", str(texto))
@@ -67,6 +67,36 @@ def extrair_lote_numerico(texto):
   return digitos
 
 
+def padronizar_data_validade(val_str):
+  """Extrai dia, mês e ano em formato estrito DD.MM.YYYY para comparação estrita."""
+  digitos = extrair_apenas_digitos(val_str)
+  if len(digitos) == 8:
+    return f"{digitos[:2]}.{digitos[2:4]}.{digitos[4:]}"
+  elif len(digitos) == 6:
+    return f"{digitos[:2]}.{digitos[2:4]}.20{digitos[4:]}"
+  return ""
+
+
+def validar_validade(val_cx_raw, val_refil_raw):
+  """Valida se as datas de validade das embalagens primária e secundária são estritamente iguais."""
+  val_cx_std = padronizar_data_validade(val_cx_raw)
+  val_refil_std = padronizar_data_validade(val_refil_raw)
+
+  # Se ambas foram lidas e padronizadas, compara dia, mês e ano
+  if val_cx_std and val_refil_std:
+    if val_cx_std != val_refil_std:
+      return (
+          False,
+          (
+              f"Divergência de Validade entre embalagens: Etiqueta/Caixa"
+              f" ({val_cx_raw}) x Lata/Refil ({val_refil_raw})."
+          ),
+          f"Não Conforme (Etiqueta {val_cx_std} x Refil {val_refil_std})",
+      )
+
+  return True, "", "Conforme (Datas equivalentes)"
+
+
 def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
   """Valida o código DUN-14 apenas se o produto possuir etiqueta colada."""
   if not tem_etiqueta:
@@ -84,7 +114,6 @@ def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
         "Não Aplicável (Produto sem Etiqueta de Código de Barras)",
     )
 
-  # Checagem estrita de comprimento (DUN-14 tem obrigatoriamente 14 dígitos)
   if len(digitos) != 14:
     return (
         False,
@@ -95,7 +124,6 @@ def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
         f"Não Conforme ({len(digitos)} dígitos - Esperado 14)",
     )
 
-  # Cruzamento com a tabela de cadastro de DUNs (lida estritamente como String)
   if dados_dun is not None and not dados_dun.empty:
     dun_encontrado = False
     for col in dados_dun.columns:
@@ -124,20 +152,16 @@ def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
 
 
 def formatar_validade(val_str):
-  """Garante a formatação com pontos (ex: 08.10.2027)"""
-  if not val_str:
-    return "00.00.0000"
-  digitos = re.sub(r"\D", "", str(val_str))
-  if len(digitos) == 8:
-    return f"{digitos[:2]}.{digitos[2:4]}.{digitos[4:]}"
-  elif len(digitos) == 6:
-    return f"{digitos[:2]}.{digitos[2:4]}.20{digitos[4:]}"
+  """Garante a formatação visual com pontos (ex: 08.04.2027)"""
+  val_std = padronizar_data_validade(val_str)
+  if val_std:
+    return val_std
   val_clean = str(val_str).strip().replace("/", ".").replace("-", ".")
   return val_clean if val_clean else "00.00.0000"
 
 
 def formatar_lote(lote_raw):
-  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098492)"""
+  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1082368)"""
   digitos = extrair_lote_numerico(lote_raw)
   if digitos:
     return f"L {digitos}"
@@ -429,7 +453,6 @@ elif st.session_state.pagina == 2:
       f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
   )
 
-  # Força a leitura das colunas como STRING estrita (evita notação científica no DUN)
   @st.cache_data(ttl=60)
   def carregar_dados_gsheet(url):
     return pd.read_csv(url, dtype=str)
@@ -521,9 +544,11 @@ elif st.session_state.pagina == 2:
                     Você é um motor de OCR industrial especialista em embalagens alimentícias.
                     Examine a IMAGEM ATUAL fornecida e extraia as informações estritamente como estão impressas.
 
-                    INSTRUÇÃO CRÍTICA DE DETECÇÃO DE ETIQUETA:
-                    - TEM_ETIQUETA: Indique 'SIM' se houver uma etiqueta branca/adesivo colada na caixa (ex: etiqueta de código de barras). Indique 'NAO' se for apenas impressão direta no papelão da caixa.
-                    - DUN: Se TEM_ETIQUETA for SIM, extraia os dígitos do DUN-14. Se for NAO, informe 'NAO_APLICAVEL'.
+                    DETECÇÃO DE ETIQUETA E DATAS DE VALIDADE:
+                    - TEM_ETIQUETA: Indique 'SIM' se houver etiqueta/adesivo colado na caixa. Indique 'NAO' se for apenas caixa de papelão direta.
+                    - VALIDADE_ETIQUETA: Data de validade impressa na ETIQUETA ADESIVA (ex: 08/04/2026).
+                    - VALIDADE_REFIL: Data de validade impressa na LATA / REFIL / EMBALAGEM PRIMÁRIA (ex: 08/04/27).
+                    - DUN: Código DUN-14 impresso na etiqueta adesiva ou NAO_APLICAVEL.
 
                     Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
@@ -531,10 +556,11 @@ elif st.session_state.pagina == 2:
                     SKU: [Código SKU]
                     TEM_ETIQUETA: [SIM ou NAO]
                     DUN: [Código DUN-14 da etiqueta ou NAO_APLICAVEL]
-                    VALIDADE: [Data de validade]
-                    MAQUINA: [Código da máquina/linha, ex: ML01, B22]
-                    LOTE_CAIXA: [Apenas os números do lote da caixa]
-                    LOTE_REFIL: [Apenas os números do lote do refil ou NAO_VISIVEL]
+                    VALIDADE_ETIQUETA: [Validade impressa na etiqueta/caixa]
+                    VALIDADE_REFIL: [Validade impressa na lata/refil]
+                    MAQUINA: [Código da máquina/linha, ex: ML01, B22, M028]
+                    LOTE_CAIXA: [Apenas os números do lote da caixa/etiqueta]
+                    LOTE_REFIL: [Apenas os números do lote do refil/lata]
                     """
 
           MODELO_LITE = "gemini-3.5-flash-lite"
@@ -564,14 +590,23 @@ elif st.session_state.pagina == 2:
             tem_etiqueta = "SIM" in tem_etiqueta_raw.upper()
 
             dun_lido = get_field("DUN", "NAO_APLICAVEL")
-            validade_lida = get_field("VALIDADE", "")
+            val_etiqueta_raw = get_field("VALIDADE_ETIQUETA", "")
+            val_refil_raw = get_field("VALIDADE_REFIL", "")
+
             maquina_lida = get_field("MAQUINA", "")
             lote_cx_raw = get_field("LOTE_CAIXA", "")
             lote_refil_raw = get_field("LOTE_REFIL", "")
 
             motivos_reprovacao = []
 
-            # 1. VALIDAÇÃO DETERMINÍSTICA DE LOTE EM PYTHON
+            # 1. VALIDAÇÃO DETERMINÍSTICA DE VALIDADE EM PYTHON
+            val_conforme, motivo_val, status_val_msg = validar_validade(
+                val_etiqueta_raw, val_refil_raw
+            )
+            if not val_conforme:
+              motivos_reprovacao.append(motivo_val)
+
+            # 2. VALIDAÇÃO DETERMINÍSTICA DE LOTE EM PYTHON
             digitos_cx = extrair_lote_numerico(lote_cx_raw)
             digitos_refil = extrair_lote_numerico(lote_refil_raw)
 
@@ -588,7 +623,7 @@ elif st.session_state.pagina == 2:
                     f" ({digitos_refil})."
                 )
 
-            # 2. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 (Apenas se houver etiqueta)
+            # 3. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 (Se houver etiqueta)
             dun_conforme, motivo_dun, status_dun_msg = validar_dun14(
                 dun_lido, tem_etiqueta, dados_dun
             )
@@ -607,8 +642,13 @@ elif st.session_state.pagina == 2:
                 f"L {digitos_cx}" if digitos_cx else f"L {lote_cx_raw}"
             )
 
+            # Data de validade principal exibida
+            validade_principal = (
+                val_etiqueta_raw if val_etiqueta_raw else val_refil_raw
+            )
+
             # Parecer Final
-            if lote_conforme and dun_conforme:
+            if val_conforme and lote_conforme and dun_conforme:
               status_final = "APROVADO"
               cabecalho_status = "### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA"
               subtitulo_motivo = ""
@@ -624,7 +664,7 @@ elif st.session_state.pagina == 2:
               )
 
             # Nome do arquivo no Drive
-            val_formatada = formatar_validade(validade_lida)
+            val_formatada = formatar_validade(validade_principal)
             lote_formatado_drive = formatar_lote(lote_num_base)
 
             partes_nome = [turno_atual, val_formatada]
@@ -647,17 +687,19 @@ elif st.session_state.pagina == 2:
 - **Descrição do Produto:** {descricao_lida}
 - **Código SKU:** {sku_lido}
 - **Código DUN-14:** {dun_exibicao}
-- **Lote da Caixa (Secundária):** {lote_cx_exibicao}
-- **Lote do Refil (Primária):** {lote_refil_exibicao}
-- **Data de Validade:** {validade_lida}
+- **Lote da Caixa/Etiqueta (Secundária):** {lote_cx_exibicao}
+- **Lote da Lata/Refil (Primária):** {lote_refil_exibicao}
+- **Validade Etiqueta (Secundária):** {val_etiqueta_raw if val_etiqueta_raw else "Não identificada"}
+- **Validade Lata/Refil (Primária):** {val_refil_raw if val_refil_raw else "Não identificada"}
 </details>
 
 <details>
 <summary>📁 <b>2. Regras de Validação</b></summary>
 
+- **Consistência de Validade:** {status_val_msg}
 - **Consistência de Lote:** {"Conforme (Lotes verificados e equivalentes)" if lote_conforme else "Não Conforme (Divergência de dígitos)"}
 - **Validação do DUN-14:** {status_dun_msg}
-- **Cruzamento SKU x DUN x OP:** {"Conforme com a OP Ativa" if (lote_conforme and dun_conforme) else "Não Conforme"}
+- **Cruzamento SKU x DUN x OP:** {"Conforme com a OP Ativa" if (val_conforme and lote_conforme and dun_conforme) else "Não Conforme"}
 </details>
 """.strip()
 
