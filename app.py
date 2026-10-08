@@ -269,7 +269,7 @@ elif st.session_state.pagina == 2:
     </div>
     """, unsafe_allow_html=True)
 
-    # URLs diretas das duas abas de OP (Poli e Inst/Revolução) e DUN
+    # URLs diretas das abas de OP (Poli e Inst/Revolução) e DUN
     GSHEET_OP_POLI_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=220654294"
     GSHEET_OP_INST_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=904615686"
     
@@ -300,7 +300,7 @@ elif st.session_state.pagina == 2:
     except Exception:
         pass
 
-    # Unifica as duas abas de OPs em um único DataFrame para o Gemini consultar
+    # Unifica as duas abas de OPs em um único DataFrame para consulta do Gemini
     lista_ops = [df for df in [dados_op_poli, dados_op_inst] if df is not None]
     if lista_ops:
         dados_op = pd.concat(lista_ops, ignore_index=True)
@@ -354,8 +354,10 @@ elif st.session_state.pagina == 2:
                 with st.spinner("⚡ Executando análise de P.A...."):
                     hora_foto = obter_hora_atual()
                     
+                    # Manter alta resolução para permitir leitura precisa de inkjet
                     image_otimizada = image.copy()
-                    image_otimizada.thumbnail((1024, 1024))
+                    if image_otimizada.width > 2048 or image_otimizada.height > 2048:
+                        image_otimizada.thumbnail((2048, 2048))
                     
                     contexto_op = ""
                     if dados_op is not None:
@@ -364,43 +366,47 @@ elif st.session_state.pagina == 2:
                         contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
                     
                     prompt = f"""
-                    Você é um validador de qualidade responsável pela LIBERAÇÃO DO PRODUTO FINAL na linha de produção.
+                    Você é um validador de qualidade especialista no setor alimentício, responsável pela LIBERAÇÃO DO PRODUTO FINAL.
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
-                    Analise a imagem capturada e gere a resposta rigorosamente no seguinte formato:
+                    DIRETRIZES DE LEITURA OCR EXTREMAMENTE RIGOROSAS:
+                    1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE:
+                       - Examine a impressão inkjet caractere por caractere (ex: preste atenção no último dígito se é '2', '3' ou '8').
+                       - Na caixa secundária, localize o número após o prefixo 'L' (ex: L1098542).
+                       - No refil/embalagem primária, verifique os caracteres impressos. SE O LOTE DO REFIL NÃO ESTIVER TOTALMENTE VISÍVEL OU ESTIVER DOBRADO/ILEGÍVEL, declare "Não visível / Ilegível na foto" em vez de inventar ou adivinhar dígitos.
+                       - NUNCA aponte divergência de lote a menos que os caracteres visíveis sejam comprovadamente e inequivocamente diferentes. Se forem idênticos, marque como CONFORME.
 
-                    1. RESULTADO DE CONFORMIDADE (DEVE FICAR NO TOPO, DIRETO E RESUMIDO):
-                       - Se aprovado:
-                         ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
-                       - Se reprovado:
-                         ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
-                         **Motivo da Não Conformidade:** [Descreva em uma frase bem objetiva onde está o erro, ex: "Divergência de lote entre Caixa (L1097543) e Refil (L1098543)" ou "DUN-14 com quantidade incorreta de dígitos"].
+                    2. ESTRUTURA DO RELATÓRIO DE SAÍDA:
+                       Gere o texto estritamente nesta estrutura:
 
-                    2. TÓPICOS 1 E 2 (DEVEM FICAR DENTRO DE BLOCOS RETRÁTEIS <details>):
+                       1. RESULTADO DE CONFORMIDADE (NO TOPO, DIRETO E OBJETIVO):
+                          - Se aprovado:
+                            ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
+                          - Se reprovado:
+                            ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
+                            **Motivo da Não Conformidade:** [Descreva o erro de forma concisa em uma frase].
 
-                    <details>
-                    <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
+                       2. TÓPICOS 1 E 2 (DENTRO DE BLOCOS <details>):
 
-                    - **Descrição do Produto:** [Descrição lida]
-                    - **Código SKU:** [SKU lido]
-                    - **Código DUN-14:** [DUN lido]
-                    - **Lote da Caixa (Secundária):** [Lote lido na caixa]
-                    - **Lote do Refil (Primária):** [Lote lido no refil]
-                    - **Data de Validade:** [Validade lida]
-                    </details>
+                       <details>
+                       <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
 
-                    <details>
-                    <summary>📁 <b>2. Regras de Validação</b></summary>
+                       - **Descrição do Produto:** [Descrição lida]
+                       - **Código SKU:** [SKU lido]
+                       - **Código DUN-14:** [DUN lido]
+                       - **Lote da Caixa (Secundária):** [Lote lido na caixa]
+                       - **Lote do Refil (Primária):** [Lote lido no refil ou 'Não visível/Ilegível na foto']
+                       - **Data de Validade:** [Validade lida]
+                       </details>
 
-                    - **Consistência de Lote:** [Status do lote]
-                    - **Validação do DUN-14:** [Status do DUN]
-                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
-                    </details>
+                       <details>
+                       <summary>📁 <b>2. Regras de Validação</b></summary>
 
-                    REGRAS CRÍTICAS DE VALIDAÇÃO:
-                    - Se o Lote da Caixa for diferente do Lote do Refil -> REPROVAR IMEDIATAMENTE e detalhar no Motivo da Não Conformidade.
-                    - Se o DUN não possuir exatamente 14 dígitos numéricos -> REPROVAR IMEDIATAMENTE.
-                    - Se o SKU ou DUN não corresponderem às tabelas ativas -> REPROVAR IMEDIATAMENTE.
+                       - **Consistência de Lote:** [Status do lote - Se o do refil não for visível, considere conforme com a caixa ou informe que depende de verificação visual rápida]
+                       - **Validação do DUN-14:** [Status do DUN]
+                       - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
+                       </details>
+
                     {contexto_op}
                     """
                     
