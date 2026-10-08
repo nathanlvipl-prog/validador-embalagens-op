@@ -28,6 +28,7 @@ def calcular_turno(dt=None):
     
     minutos_totais = dt.hour * 60 + dt.minute
     
+    # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
     if 340 <= minutos_totais < 840:
         return "Turno A"
     elif 840 <= minutos_totais < 1340:
