@@ -31,7 +31,6 @@ def calcular_turno(dt=None):
 
   minutos_totais = dt.hour * 60 + dt.minute
 
-  # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
   if 340 <= minutos_totais < 840:
     return "Turno A"
   elif 840 <= minutos_totais < 1340:
@@ -40,28 +39,81 @@ def calcular_turno(dt=None):
     return "Turno C"
 
 
+def extrair_apenas_digitos(texto):
+  """Remove tudo que não for dígito numérico"""
+  if not texto:
+    return ""
+  return re.sub(r"\D", "", str(texto))
+
+
 def extrair_lote_numerico(texto):
-  """Extrai estritamente a numeração do lote (6 a 8 dígitos), descartando horários (ex: 03:21), códigos de máquina (ex: ML01, B22) e sufixos (RN)."""
+  """Extrai estritamente a numeração do lote (6 a 8 dígitos), descartando horários, máquinas e sufixos."""
   if not texto:
     return ""
 
   texto_str = str(texto)
 
-  # 1. Procura por "L" ou "LOTE" seguido de 6 a 8 dígitos (ex: L1098673 ou L 1098673)
   match_l = re.search(r"L(?:OTE)?\s*(\d{6,8})", texto_str, re.IGNORECASE)
   if match_l:
     return match_l.group(1)
 
-  # 2. Procura qualquer sequência isolada de 6 a 8 dígitos
   match_seq = re.search(r"\b\d{6,8}\b", texto_str)
   if match_seq:
     return match_seq.group(0)
 
-  # 3. Fallback: extrai apenas os dígitos e limita aos 7 primeiros se houver horário concatenado
   digitos = re.sub(r"\D", "", texto_str)
   if len(digitos) > 8:
     return digitos[:7]
   return digitos
+
+
+def validar_dun14(dun_lido, dados_dun=None):
+  """Valida se o DUN-14 possui 14 dígitos e se existe na planilha de cadastro."""
+  digitos = extrair_apenas_digitos(dun_lido)
+  if not digitos:
+    return (
+        False,
+        "Código DUN-14 não identificado na etiqueta.",
+        "Não Identificado",
+    )
+
+  # Checagem estrita de comprimento (DUN-14 tem obrigatoriamente 14 dígitos)
+  if len(digitos) != 14:
+    return (
+        False,
+        (
+            f"Código DUN-14 na etiqueta ({digitos}) possui {len(digitos)}"
+            " dígitos (esperado 14 dígitos). Faltando dígito na impressão da"
+            " etiqueta."
+        ),
+        f"Não Conforme ({len(digitos)} dígitos - Esperado 14)",
+    )
+
+  # Cruzamento com a tabela de cadastro de DUNs (se disponível)
+  if dados_dun is not None and not dados_dun.empty:
+    dun_encontrado = False
+    for col in dados_dun.columns:
+      valores_col = (
+          dados_dun[col]
+          .dropna()
+          .astype(str)
+          .apply(extrair_apenas_digitos)
+          .values
+      )
+      if digitos in valores_col:
+        dun_encontrado = True
+        break
+    if not dun_encontrado:
+      return (
+          False,
+          (
+              f"Código DUN-14 ({digitos}) não foi encontrado na tabela de"
+              " cadastro SKU x DUN."
+          ),
+          "Não Conforme (Fora do Cadastro)",
+      )
+
+  return True, "", "Conforme (14 dígitos validados)"
 
 
 def formatar_validade(val_str):
@@ -78,7 +130,7 @@ def formatar_validade(val_str):
 
 
 def formatar_lote(lote_raw):
-  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098673)"""
+  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1098492)"""
   digitos = extrair_lote_numerico(lote_raw)
   if digitos:
     return f"L {digitos}"
@@ -448,7 +500,7 @@ elif st.session_state.pagina == 2:
       if st.button(
           "🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True
       ):
-        with st.spinner("⚡ Leitura OCR de alta precisão..."):
+        with st.spinner("⚡ Leitura OCR e validações rigorosas em curso..."):
           dt_now = obter_datetime_br()
           hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
           turno_atual = calcular_turno(dt_now)
@@ -459,17 +511,16 @@ elif st.session_state.pagina == 2:
 
           prompt_ocr = """
                     Você é um motor de OCR industrial especialista em embalagens alimentícias.
-                    Examine a IMAGEM ATUAL fornecida e extraia as informações numéricas de lote.
+                    Examine a IMAGEM ATUAL fornecida e extraia as informações estritamente como estão impressas.
 
-                    INSTRUÇÕES CRÍTICAS DE EXTRAÇÃO DO LOTE:
-                    - LOTE_CAIXA: Informe APENAS o código numérico do lote impresso na caixa secundária (ex: se estiver L1098673 RN, extraia apenas 1098673).
-                    - LOTE_REFIL: Informe APENAS o código numérico do lote impresso no refil (ex: se estiver L1098673 RN 03:21, extraia APENAS o lote 1098673, ignorando totalmente horários como 03:21, códigos de máquina como ML01 e o sufixo RN).
+                    ATENÇÃO AO CÓDIGO DUN-14:
+                    - Transcreva TODOS os dígitos do DUN-14 impresso na etiqueta (ex: 1781018427688). Não adicione nem corrija dígitos por conta própria.
 
                     Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
                     DESCRICAO: [Nome do produto]
                     SKU: [Código SKU]
-                    DUN: [Código DUN-14]
+                    DUN: [Código DUN-14 impresso na etiqueta]
                     VALIDADE: [Data de validade]
                     MAQUINA: [Código da máquina/linha, ex: ML01, B22]
                     LOTE_CAIXA: [Apenas os números do lote da caixa]
@@ -505,17 +556,13 @@ elif st.session_state.pagina == 2:
             lote_cx_raw = get_field("LOTE_CAIXA", "")
             lote_refil_raw = get_field("LOTE_REFIL", "")
 
-            # --- PROCESSAMENTO DETERMINÍSTICO DE LOTE EM PYTHON ---
+            motivos_reprovacao = []
+
+            # 1. VALIDAÇÃO DETERMINÍSTICA DE LOTE EM PYTHON
             digitos_cx = extrair_lote_numerico(lote_cx_raw)
             digitos_refil = extrair_lote_numerico(lote_refil_raw)
 
-            # Lote base numérico
-            lote_num_base = digitos_cx if digitos_cx else digitos_refil
-
-            # Validação determinística do Lote
             lote_conforme = True
-            motivo_nao_conformidade = ""
-
             if (
                 digitos_cx
                 and digitos_refil
@@ -523,10 +570,20 @@ elif st.session_state.pagina == 2:
             ):
               if digitos_cx != digitos_refil:
                 lote_conforme = False
-                motivo_nao_conformidade = (
-                    f"Divergência de Lote entre embalagens: Caixa"
-                    f" ({digitos_cx}) x Refil/Lata ({digitos_refil})."
+                motivos_reprovacao.append(
+                    f"Divergência de Lote: Caixa ({digitos_cx}) x Refil/Lata"
+                    f" ({digitos_refil})."
                 )
+
+            # 2. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 EM PYTHON
+            dun_conforme, motivo_dun, status_dun_msg = validar_dun14(
+                dun_lido, dados_dun
+            )
+            if not dun_conforme:
+              motivos_reprovacao.append(motivo_dun)
+
+            # Lote base para o nome do arquivo
+            lote_num_base = digitos_cx if digitos_cx else digitos_refil
 
             lote_refil_exibicao = (
                 f"L {digitos_refil}"
@@ -537,8 +594,8 @@ elif st.session_state.pagina == 2:
                 f"L {digitos_cx}" if digitos_cx else f"L {lote_cx_raw}"
             )
 
-            # Parecer final do Python
-            if lote_conforme:
+            # Parecer Final
+            if lote_conforme and dun_conforme:
               status_final = "APROVADO"
               cabecalho_status = "### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA"
               subtitulo_motivo = ""
@@ -548,10 +605,12 @@ elif st.session_state.pagina == 2:
                   "### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA"
               )
               subtitulo_motivo = (
-                  f"\n**Motivo da Não Conformidade:** {motivo_nao_conformidade}\n"
+                  "\n**Motivo da Não Conformidade:** "
+                  + " | ".join(motivos_reprovacao)
+                  + "\n"
               )
 
-            # Construção do nome do arquivo Drive
+            # Nome do arquivo no Drive
             val_formatada = formatar_validade(validade_lida)
             lote_formatado_drive = formatar_lote(lote_num_base)
 
@@ -570,7 +629,7 @@ elif st.session_state.pagina == 2:
 
 - **Descrição do Produto:** {descricao_lida}
 - **Código SKU:** {sku_lido}
-- **Código DUN-14:** {dun_lido}
+- **Código DUN-14:** {dun_lido if dun_lido else "Não identificado"}
 - **Lote da Caixa (Secundária):** {lote_cx_exibicao}
 - **Lote do Refil (Primária):** {lote_refil_exibicao}
 - **Data de Validade:** {validade_lida}
@@ -580,8 +639,8 @@ elif st.session_state.pagina == 2:
 <summary>📁 <b>2. Regras de Validação</b></summary>
 
 - **Consistência de Lote:** {"Conforme (Lotes verificados e equivalentes)" if lote_conforme else "Não Conforme (Divergência de dígitos)"}
-- **Validação do DUN-14:** Conforme
-- **Cruzamento SKU x DUN x OP:** Conforme com a OP Ativa
+- **Validação do DUN-14:** {status_dun_msg}
+- **Cruzamento SKU x DUN x OP:** {"Conforme com a OP Ativa" if (lote_conforme and dun_conforme) else "Não Conforme"}
 </details>
 """.strip()
 
