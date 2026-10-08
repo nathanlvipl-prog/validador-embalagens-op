@@ -31,7 +31,6 @@ def calcular_turno(dt=None):
 
   minutos_totais = dt.hour * 60 + dt.minute
 
-  # 05:40 = 340 min | 14:00 = 840 min | 22:20 = 1340 min
   if 340 <= minutos_totais < 840:
     return "Turno A"
   elif 840 <= minutos_totais < 1340:
@@ -41,7 +40,7 @@ def calcular_turno(dt=None):
 
 
 def formatar_validade(val_str):
-  """Garante que a validade fique com pontos (ex: 06.10.2027 ou 06.10.27)"""
+  """Garante que a validade fique com pontos (ex: 06.10.2027)"""
   val_clean = val_str.strip().replace("/", ".").replace("-", ".")
   digitos = re.sub(r"\D", "", val_clean)
   if len(digitos) == 8:
@@ -64,10 +63,10 @@ def formatar_lote(lote_str):
 def converter_imagem_base64(img):
   """Otimiza e converte a imagem PIL para string Base64 compacta"""
   img_copia = img.copy()
-  if img_copia.width > 1280 or img_copia.height > 1280:
-    img_copia.thumbnail((1280, 1280))
+  if img_copia.width > 1600 or img_copia.height > 1600:
+    img_copia.thumbnail((1600, 1600))
   buffered = io.BytesIO()
-  img_copia.convert("RGB").save(buffered, format="JPEG", quality=75)
+  img_copia.convert("RGB").save(buffered, format="JPEG", quality=85)
   return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
@@ -82,13 +81,13 @@ st.set_page_config(
     layout="wide",
 )
 
-# 2. DICIONÁRIO DE MATRÍCULAS E COLABORADORES
+# CADASTRO DE COLABORADORES
 CADASTRO_COLABORADORES = {
     "32164": "SILVIO NATHANAEL MEDEIROS DA SILVA",
     "32177": "EMANUEL LUCAS SEVERIANO DE SOUSA",
 }
 
-# 3. GERENCIAMENTO DE SESSÃO / NAVEGAÇÃO
+# GERENCIAMENTO DE SESSÃO / NAVEGAÇÃO
 if "pagina" not in st.session_state:
   st.session_state.pagina = 1
 
@@ -109,7 +108,7 @@ if "hora_analise" not in st.session_state:
   st.session_state.hora_analise = ""
 
 
-# 4. FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS/DRIVE
+# FUNÇÃO PARA ENVIAR LOGS E IMAGEM PARA O GOOGLE SHEETS/DRIVE
 def enviar_log_sheets(webhook_url, dados):
   """Envia os dados de registro e imagem via HTTP POST"""
   if not webhook_url or "SUA_URL" in webhook_url:
@@ -124,7 +123,7 @@ def enviar_log_sheets(webhook_url, dados):
     return False
 
 
-# 5. ESTILIZAÇÃO CSS
+# ESTILIZAÇÃO CSS
 st.markdown(
     """
 <style>
@@ -425,7 +424,7 @@ elif st.session_state.pagina == 2:
           "🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True
       ):
         with st.spinner(
-            "⚡ Executando análise de P.A. e enviando ao Drive..."
+            "⚡ Executando análise rigorosa de P.A. e enviando ao Drive..."
         ):
           dt_now = obter_datetime_br()
           hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
@@ -442,49 +441,56 @@ elif st.session_state.pagina == 2:
             contexto_op += f"\n\n--- TABELA DE REFERÊNCIA CADASTRO SKU x DUN-14 ---\n{dados_dun.to_string(index=False)}"
 
           prompt = f"""
-                    Você é um validador de qualidade especialista no setor alimentício, responsável pela LIBERAÇÃO DO PRODUTO FINAL.
+                    Você é um auditor de qualidade industrial implacável e hiper-rigoroso do setor alimentício, responsável pela LIBERAÇÃO DO PRODUTO FINAL.
                     Validador: {st.session_state.usuario_nome} | {st.session_state.usuario_funcao} (Matrícula: {st.session_state.usuario_matricula}).
 
-                    DIRETRIZES DE LEITURA OCR EXTREMAMENTE RIGOROSAS:
-                    1. EXTREMA PRECISÃO NOS NÚMEROS DO LOTE E VALIDADE:
-                       - Examine a impressão inkjet caractere por caractere.
-                       - Identifique explicitamente: Validade (ex: 06.10.2027), Código/Nome da Máquina (ex: B22 ou M028) e Lote (ex: 1098492).
-                       - Se o lote no refil não estiver visível, use o lote da caixa.
+                    PROTOCOLO DE INSPEÇÃO OCR E VALIDAÇÃO NUMÉRICA OBRIGATÓRIA:
 
-                    2. ESTRUTURA DO RELATÓRIO DE SAÍDA:
-                       Gere o texto estritamente nesta estrutura:
+                    PASSO 1: EXTRAÇÃO SEPARADA E DÍGITO A DÍGITO DOS NÚMEROS DO LOTE:
+                    - Extraia o número do Lote impresso na EMBALAGEM PRIMÁRIA (Lata / Refil / Fundo de lata): ex: "1098492"
+                    - Extraia o número do Lote impresso na EMBALAGEM SECUNDÁRIA / ETIQUETA / CAIXA: ex: "1096492"
+                    - COMPARE CADA DÍGITO, DA ESQUERDA PARA A DIREITA:
+                      Atenção especial a dígitos facilmente confundíveis em impressão inkjet/térmica: (6 x 8, 3 x 8, 0 x 8, 2 x 3, 1 x 7).
+                      Exemplo de divergência: "1098492" na lata vs "1096492" na etiqueta tem uma divergência no 4º dígito (8 != 6).
 
-                       1. RESULTADO DE CONFORMIDADE (NO TOPO, DIRETO E OBJETIVO):
-                          - Se aprovado:
-                            ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
-                          - Se reprovado:
-                            ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
-                            **Motivo da Não Conformidade:** [Descreva o erro em uma frase concisa].
+                    REGRA ABSOLUTA DE REPROVAÇÃO DE LOTE:
+                    - Se o número do lote da etiqueta/caixa diferir por QUALQUER DÍGITO do lote da lata/refil, O PRODUTO ESTÁ REPROVADO E NÃO CONFORME!
+                    - NUNCA declare como Conforme se houver diferença de um único número entre a lata e a etiqueta/caixa.
 
-                       2. TÓPICOS 1 E 2 (DENTRO DE BLOCOS <details>):
+                    PASSO 2: ESTRUTURA DO RELATÓRIO DE SAÍDA:
+                    Gere a resposta rigorosamente no seguinte formato:
 
-                       <details>
-                       <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
+                    1. RESULTADO DE CONFORMIDADE (NO TOPO, DIRETO E OBJETIVO):
+                       - Se aprovado (todos os números idênticos e conformes com a tabela):
+                         ### ✅ PRODUTO CONFORME - LIBERAÇÃO APROVADA
+                       - Se reprovado (diferença de lote, DUN inválido ou SKU incorreto):
+                         ### ❌ PRODUTO NÃO CONFORME - LIBERAÇÃO REPROVADA
+                         **Motivo da Não Conformidade:** [Descreva o erro exatamente, ex: "Divergência de Lote: Etiqueta/Caixa (1096492) x Embalagem Primária/Lata (1098492)"].
 
-                       - **Descrição do Produto:** [Descrição lida]
-                       - **Código SKU:** [SKU lido]
-                       - **Código DUN-14:** [DUN lido]
-                       - **Lote da Caixa (Secundária):** [Lote lido na caixa]
-                       - **Lote do Refil (Primária):** [Lote lido no refil]
-                       - **Data de Validade:** [Validade lida]
-                       </details>
+                    2. TÓPICOS 1 E 2 (DENTRO DE BLOCOS <details>):
 
-                       <details>
-                       <summary>📁 <b>2. Regras de Validação</b></summary>
+                    <details>
+                    <summary>📁 <b>1. Extração de Dados da Embalagem</b></summary>
 
-                       - **Consistência de Lote:** [Status do lote]
-                       - **Validação do DUN-14:** [Status do DUN]
-                       - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
-                       </details>
+                    - **Descrição do Produto:** [Descrição lida]
+                    - **Código SKU:** [SKU lido]
+                    - **Código DUN-14:** [DUN lido]
+                    - **Lote da Caixa/Etiqueta (Secundária):** [Lote lido na etiqueta/caixa]
+                    - **Lote da Lata/Refil (Primária):** [Lote lido no fundo da lata/refil]
+                    - **Data de Validade:** [Validade lida]
+                    </details>
 
-                       3. DADOS FORMATADOS PARA O NOME DO ARQUIVO:
-                       Adicione ao final a linha exata (substituindo com os dados extraídos):
-                       TAG_DRIVE_INFO: VALIDADE=[val] MAQUINA=[maq] LOTE=[lote]
+                    <details>
+                    <summary>📁 <b>2. Regras de Validação</b></summary>
+
+                    - **Confronto de Lotes:** [Especifique a comparação detalhada dos lotes]
+                    - **Validação do DUN-14:** [Status do DUN]
+                    - **Cruzamento SKU x DUN x OP:** [Status do cruzamento com a tabela]
+                    </details>
+
+                    3. DADOS FORMATADOS PARA O NOME DO ARQUIVO:
+                    Adicione ao final a linha exata (substituindo com os dados extraídos da etiqueta/caixa):
+                    TAG_DRIVE_INFO: VALIDADE=[val] MAQUINA=[maq] LOTE=[lote]
 
                     {contexto_op}
                     """
@@ -505,6 +511,8 @@ elif st.session_state.pagina == 2:
 
           if resposta and resposta.text:
             parecer_texto = resposta.text
+
+            # Status baseado no resultado
             status_final = (
                 "APROVADO"
                 if "PRODUTO CONFORME" in parecer_texto
