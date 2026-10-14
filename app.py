@@ -444,7 +444,6 @@ elif st.session_state.pagina == 2:
       unsafe_allow_html=True,
   )
 
-  # Link atualizado com o gid 607447606
   GSHEET_OP_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=607447606"
 
   SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
@@ -544,6 +543,7 @@ elif st.session_state.pagina == 2:
                     LOTE_REFIL: [Apenas os números do lote do refil/lata]
                     """
 
+          # Utilizando o modelo compacto/min da família Gemini 3 (Flash-Lite)
           MODELO_LITE = "gemini-3.5-flash-lite"
           resposta = None
 
@@ -555,7 +555,8 @@ elif st.session_state.pagina == 2:
               )
               if resposta and resposta.text:
                 break
-            except Exception:
+            except Exception as e:
+              st.error(f"Erro na API com o modelo {MODELO_LITE}: {e}")
               continue
 
           if resposta and resposta.text:
@@ -705,8 +706,6 @@ elif st.session_state.pagina == 2:
 
             st.session_state.pagina = 3
             st.rerun()
-          else:
-            st.error("Erro no processamento. Verifique as chaves API.")
 
 # ==============================================================================
 # PÁGINA 3: RESULTADO DA LIBERAÇÃO E PARECER TÉCNICO
