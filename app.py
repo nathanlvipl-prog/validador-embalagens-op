@@ -97,12 +97,17 @@ def validar_validade(val_cx_raw, val_refil_raw):
 
 
 def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
-  """Valida o código DUN-14 apenas se o produto possuir etiqueta colada."""
-  if not tem_etiqueta:
+  """Valida o código DUN-14 EXCLUSIVAMENTE se houver etiqueta adesiva Argox.
+
+  Caixas de papelão (secundárias/terciárias) com impressão direta NÃO validam
+  DUN.
+  """
+  if not tem_etiqueta or "NAO" in str(tem_etiqueta).upper():
     return (
         True,
         "",
-        "Não Aplicável (Sem Etiqueta - Impressão Direta na Caixa)",
+        "Não Aplicável (Caixa de Papelão / Impressão Direta - Sem Validação"
+        " DUN)",
     )
 
   digitos = extrair_apenas_digitos(dun_lido)
@@ -117,8 +122,9 @@ def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
     return (
         False,
         (
-            f"Código DUN-14 na etiqueta ({digitos}) possui {len(digitos)}"
-            " dígitos (esperado 14 dígitos). Impressão incompleta."
+            f"Código DUN-14 na etiqueta Argox ({digitos}) possui"
+            f" {len(digitos)} dígitos (esperado 14 dígitos). Impressão"
+            " incompleta."
         ),
         f"Não Conforme ({len(digitos)} dígitos - Esperado 14)",
     )
@@ -511,7 +517,9 @@ elif st.session_state.pagina == 2:
       if st.button(
           "🔬 PROCESSAR E GERAR LIBERAÇÃO", use_container_width=True
       ):
-        with st.spinner("⚡ Leitura OCR e validações rigorosas em curso..."):
+        with st.spinner(
+            "⚡ Leitura OCR de alta precisão e validações em curso..."
+        ):
           dt_now = obter_datetime_br()
           hora_foto = dt_now.strftime("%d/%m/%Y %H:%M:%S")
           turno_atual = calcular_turno(dt_now)
@@ -521,14 +529,19 @@ elif st.session_state.pagina == 2:
             image_otimizada.thumbnail((2048, 2048))
 
           prompt_ocr = """
-                    Você é um motor de OCR industrial especialista em embalagens alimentícias.
-                    Examine a IMAGEM ATUAL fornecida e extraia as informações estritamente como estão impressas.
+                    Você é um motor de OCR industrial sênior especializado em visão computacional para embalagens de alimentos e jato de tinta (inkjet).
+                    Examine a IMAGEM ATUAL fornecida com extremo rigor e atenção aos detalhes numéricos impressos nas embalagens.
 
-                    DETECÇÃO DE ETIQUETA E DATAS DE VALIDADE:
-                    - TEM_ETIQUETA: Indique 'SIM' se houver etiqueta/adesivo colado na caixa. Indique 'NAO' se for apenas caixa de papelão direta.
-                    - VALIDADE_ETIQUETA: Data de validade impressa na ETIQUETA ADESIVA (ex: 08/04/2026).
-                    - VALIDADE_REFIL: Data de validade impressa na LATA / REFIL / EMBALAGEM PRIMÁRIA (ex: 08/04/27).
-                    - DUN: Código DUN-14 impresso na etiqueta adesiva ou NAO_APLICAVEL.
+                    ATENÇÃO CRUCIAL PARA DISTINÇÃO DE DÍGITOS (Evite erros de confusão entre 7 e 9):
+                    - Códigos impressos a jato de tinta em caixas de papelão marrom frequentemente possuem pontos borrados. Analise cuidadosamente a curvatura completa dos dígitos numéricos (como '9' que possui um loop fechado superior e '7' que é uma linha reta angulada) para NUNCA confundir 7 com 9 ou vice-versa. Faça dupla checagem visual de cada dígito do lote!
+
+                    REGRAS DE EXTRAÇÃO:
+                    - TEM_ETIQUETA: Indique 'SIM' EXCLUSIVAMENTE se houver uma etiqueta adesiva térmica colada (tipo Argox). Indique 'NAO' se for uma caixa de papelão (secundária/terciária) com impressão direta direto na caixa marrom/parda.
+                    - DUN: Se for caixa de papelão com impressão direta (TEM_ETIQUETA: NAO), informe obrigatoriamente 'NAO_APLICAVEL'. Se for etiqueta adesiva Argox (TEM_ETIQUETA: SIM), extraia o código DUN-14 impresso na etiqueta.
+                    - VALIDADE_ETIQUETA: Data de validade impressa na etiqueta (se houver) ou deixe vazio.
+                    - VALIDADE_REFIL: Data de validade impressa na lata / refil ou na própria caixa de papelão.
+                    - LOTE_CAIXA: Extração exata dos dígitos do lote da caixa de papelão (ex: L1099062 -> extraia exatamente os dígitos com total fidelidade visual).
+                    - LOTE_REFIL: Extração exata dos dígitos do lote do refil/lata apoiado em cima.
 
                     Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
@@ -536,14 +549,13 @@ elif st.session_state.pagina == 2:
                     SKU: [Código SKU]
                     TEM_ETIQUETA: [SIM ou NAO]
                     DUN: [Código DUN-14 da etiqueta ou NAO_APLICAVEL]
-                    VALIDADE_ETIQUETA: [Validade impressa na etiqueta/caixa]
-                    VALIDADE_REFIL: [Validade impressa na lata/refil]
+                    VALIDADE_ETIQUETA: [Validade impressa na etiqueta]
+                    VALIDADE_REFIL: [Validade impressa na lata/refil/caixa]
                     MAQUINA: [Código da máquina/linha, ex: ML01, B22, M028]
                     LOTE_CAIXA: [Apenas os números do lote da caixa/etiqueta]
                     LOTE_REFIL: [Apenas os números do lote do refil/lata]
                     """
 
-          # Utilizando o modelo compacto/min da família Gemini 3 (Flash-Lite)
           MODELO_LITE = "gemini-3.5-flash-lite"
           resposta = None
 
@@ -569,7 +581,10 @@ elif st.session_state.pagina == 2:
             descricao_lida = get_field("DESCRICAO", "Produto Industrial")
             sku_lido = get_field("SKU", "")
             tem_etiqueta_raw = get_field("TEM_ETIQUETA", "NAO")
-            tem_etiqueta = "SIM" in tem_etiqueta_raw.upper()
+            tem_etiqueta = (
+                "SIM" in tem_etiqueta_raw.upper()
+                and "NAO" not in tem_etiqueta_raw.upper()
+            )
 
             dun_lido = get_field("DUN", "NAO_APLICAVEL")
             val_etiqueta_raw = get_field("VALIDADE_ETIQUETA", "")
@@ -605,7 +620,7 @@ elif st.session_state.pagina == 2:
                     f" ({digitos_refil})."
                 )
 
-            # 3. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 (Se houver etiqueta)
+            # 3. VALIDAÇÃO DETERMINÍSTICA DE DUN-14 (Somente se for etiqueta Argox)
             dun_conforme, motivo_dun, status_dun_msg = validar_dun14(
                 dun_lido, tem_etiqueta, dados_dun
             )
@@ -657,7 +672,9 @@ elif st.session_state.pagina == 2:
             nome_arquivo_drive = " ".join(partes_nome)
 
             dun_exibicao = (
-                dun_lido if tem_etiqueta else "Não Aplicável (Sem Etiqueta)"
+                dun_lido
+                if tem_etiqueta
+                else "Não Aplicável (Caixa de Papelão / Impressão Direta)"
             )
 
             parecer_exibicao = f"""{cabecalho_status}
@@ -667,11 +684,12 @@ elif st.session_state.pagina == 2:
 
 - **Descrição do Produto:** {descricao_lida}
 - **Código SKU:** {sku_lido}
+- **Tipo de Embalagem:** {"Etiqueta Adesiva Argox" if tem_etiqueta else "Caixa de Papelão / Impressão Direta"}
 - **Código DUN-14:** {dun_exibicao}
 - **Lote da Caixa/Etiqueta (Secundária):** {lote_cx_exibicao}
 - **Lote da Lata/Refil (Primária):** {lote_refil_exibicao}
-- **Validade Etiqueta (Secundária):** {val_etiqueta_raw if val_etiqueta_raw else "Não identificada"}
-- **Validade Lata/Refil (Primária):** {val_refil_raw if val_refil_raw else "Não identificada"}
+- **Validade Etiqueta/Caixa:** {val_etiqueta_raw if val_etiqueta_raw else "Não identificada"}
+- **Validade Lata/Refil:** {val_refil_raw if val_refil_raw else "Não identificada"}
 </details>
 
 <details>
