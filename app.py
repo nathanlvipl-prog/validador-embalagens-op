@@ -82,7 +82,6 @@ def validar_validade(val_cx_raw, val_refil_raw):
   val_cx_std = padronizar_data_validade(val_cx_raw)
   val_refil_std = padronizar_data_validade(val_refil_raw)
 
-  # Se ambas foram lidas e padronizadas, compara dia, mês e ano
   if val_cx_std and val_refil_std:
     if val_cx_std != val_refil_std:
       return (
@@ -445,30 +444,25 @@ elif st.session_state.pagina == 2:
       unsafe_allow_html=True,
   )
 
-  GSHEET_OP_POLI_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=220654294"
-  GSHEET_OP_INST_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=904615686"
+  # Link atualizado com o gid 607447606
+  GSHEET_OP_URL = "https://docs.google.com/spreadsheets/d/1YScgtOowZjmTWMKnlcwya1nPQKt0u34luPSb4U82_-E/export?format=csv&gid=607447606"
 
   SHEET_DUN_ID = "1TDROYy4E6u41k6n05lWyGfh3o7SjYz4JoofK1saNC-M"
   GSHEET_DUN_URL = (
       f"https://docs.google.com/spreadsheets/d/{SHEET_DUN_ID}/export?format=csv"
   )
 
+
   @st.cache_data(ttl=60)
   def carregar_dados_gsheet(url):
     return pd.read_csv(url, dtype=str)
 
-  dados_op_poli = None
-  dados_op_inst = None
+
   dados_op = None
   dados_dun = None
 
   try:
-    dados_op_poli = carregar_dados_gsheet(GSHEET_OP_POLI_URL)
-  except Exception:
-    pass
-
-  try:
-    dados_op_inst = carregar_dados_gsheet(GSHEET_OP_INST_URL)
+    dados_op = carregar_dados_gsheet(GSHEET_OP_URL)
   except Exception:
     pass
 
@@ -477,27 +471,14 @@ elif st.session_state.pagina == 2:
   except Exception:
     pass
 
-  lista_ops = [df for df in [dados_op_poli, dados_op_inst] if df is not None]
-  if lista_ops:
-    dados_op = pd.concat(lista_ops, ignore_index=True)
-
   with st.expander("📋 Tabela de Referência para Liberação (OPs e SKUs)"):
     col1, col2 = st.columns(2)
     with col1:
       st.subheader("Ordens de Produção (OP)")
-      tab_poli, tab_inst = st.tabs(["Poli", "Inst / Revolução"])
-
-      with tab_poli:
-        if dados_op_poli is not None:
-          st.dataframe(dados_op_poli, use_container_width=True)
-        else:
-          st.info("Aba 'Poli' em carregamento...")
-
-      with tab_inst:
-        if dados_op_inst is not None:
-          st.dataframe(dados_op_inst, use_container_width=True)
-        else:
-          st.info("Aba 'Inst / Revolução' em carregamento...")
+      if dados_op is not None:
+        st.dataframe(dados_op, use_container_width=True)
+      else:
+        st.info("Tabela de OPs em carregamento...")
 
     with col2:
       st.subheader("Cadastro SKU x DUN")
@@ -642,7 +623,6 @@ elif st.session_state.pagina == 2:
                 f"L {digitos_cx}" if digitos_cx else f"L {lote_cx_raw}"
             )
 
-            # Data de validade principal exibida
             validade_principal = (
                 val_etiqueta_raw if val_etiqueta_raw else val_refil_raw
             )
