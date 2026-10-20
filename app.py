@@ -82,6 +82,12 @@ def validar_validade(val_cx_raw, val_refil_raw):
   val_cx_std = padronizar_data_validade(val_cx_raw)
   val_refil_std = padronizar_data_validade(val_refil_raw)
 
+  # Se uma das validades não foi extraída separadamente, assume a validade única lida
+  if not val_cx_std and val_refil_std:
+    val_cx_std = val_refil_std
+  if not val_refil_std and val_cx_std:
+    val_refil_std = val_cx_std
+
   if val_cx_std and val_refil_std:
     if val_cx_std != val_refil_std:
       return (
@@ -96,7 +102,7 @@ def validar_validade(val_cx_raw, val_refil_raw):
   return True, "", "Conforme (Datas equivalentes)"
 
 
-def validar_dun14(dun_lido, tem_etiqueta=True, dados_dun=None):
+def validar_dun14(dun_lido, tem_etiqueta=False, dados_dun=None):
   """Valida o código DUN-14 EXCLUSIVAMENTE se houver etiqueta adesiva Argox."""
   if not tem_etiqueta or "NAO" in str(tem_etiqueta).upper():
     return (
@@ -192,7 +198,7 @@ def buscar_descricao_por_sku(sku_lido, dados_op):
 
 
 def formatar_validade(val_str):
-  """Garante a formatação visual com pontos (ex: 08.04.2027)"""
+  """Garante a formatação visual com pontos (ex: 20.10.2027)"""
   val_std = padronizar_data_validade(val_str)
   if val_std:
     return val_std
@@ -201,7 +207,7 @@ def formatar_validade(val_str):
 
 
 def formatar_lote(lote_raw):
-  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1082368)"""
+  """Garante o formato com espaço entre 'L' e a numeração (ex: L 1099788)"""
   digitos = extrair_lote_numerico(lote_raw)
   if digitos:
     return f"L {digitos}"
@@ -592,19 +598,26 @@ elif st.session_state.pagina == 2:
             image_otimizada.thumbnail((2048, 2048))
 
           prompt_ocr = """
-                    Você é um motor de OCR industrial sênior. Sua ÚNICA tarefa nesta imagem é extrair com precisão absoluta os números correspondentes ao SKU, lote e validades.
-                    NÃO extraia nomes de produtos da caixa, pois as caixas são multiuso.
+                    Você é um motor de OCR industrial sênior. Analise esta imagem de inspeção de produto final.
+                    
+                    REGRAS CRÍTICAS DE EXTRAÇÃO:
+                    1. Se as informações (lote, validade, código) estiverem impressas DIRETO NA CAIXA DE PAPELÃO (impressão a jato de tinta/inkjet sem etiqueta de papel branca adesiva):
+                       - Defina TEM_ETIQUETA: NAO
+                       - Defina DUN: NAO_APLICAVEL
+                    2. Apenas se houver uma ETIQUETA ADESIVA DE PAPEL BRANCA (Argox) colada na caixa contendo código de barras DUN-14:
+                       - Defina TEM_ETIQUETA: SIM
+                       - Defina DUN: [Código de 14 dígitos da etiqueta]
 
                     Retorne ESTRITAMENTE o modelo abaixo preenchido:
 
-                    SKU: [Código SKU numérico impresso próximo ao código de barras do produto ativo]
+                    SKU: [Código SKU numérico impresso acima do código de barras, ex: 12014010]
                     TEM_ETIQUETA: [SIM ou NAO]
-                    DUN: [Código DUN-14 da etiqueta ou NAO_APLICAVEL]
-                    VALIDADE_ETIQUETA: [Validade impressa na etiqueta]
-                    VALIDADE_REFIL: [Validade impressa na lata/refil/caixa]
-                    MAQUINA: [Código da máquina/linha, ex: ML01, B22, M028]
-                    LOTE_CAIXA: [Apenas os números do lote da caixa/etiqueta]
-                    LOTE_REFIL: [Apenas os números do lote do refil/lata]
+                    DUN: [Código DUN-14 de 14 dígitos se houver etiqueta, ou NAO_APLICAVEL]
+                    VALIDADE_ETIQUETA: [Validade impressa na caixa/etiqueta, ex: 20/10/27]
+                    VALIDADE_REFIL: [Validade impressa no refil/lata, ex: 20/10/27]
+                    MAQUINA: [Código da máquina/linha impresso, ex: ML01]
+                    LOTE_CAIXA: [Apenas os números do lote impresso na caixa, ex: 1099788]
+                    LOTE_REFIL: [Apenas os números do lote impresso no refil, ex: 1099788]
                     """
 
           MODELO_LITE = "gemini-3.5-flash-lite"
